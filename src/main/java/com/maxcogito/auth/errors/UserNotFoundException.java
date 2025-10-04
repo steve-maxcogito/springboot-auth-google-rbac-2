@@ -1,0 +1,9 @@
+package com.maxcogito.auth.errors;
+
+public class UserNotFoundException extends RuntimeException{
+        public UserNotFoundException(String username) {
+            super("User not found: " + username);
+        }
+}
+
+
