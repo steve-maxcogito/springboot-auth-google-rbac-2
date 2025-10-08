@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -60,6 +61,12 @@ public class UserService {
                 .stream().map(r -> r.getName())
                 .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
+
+    @Transactional
+    public List<User> findAll(){
+        List<User> users = userRepository.findAll();
+        return users;
+    };
 
 
     @Transactional

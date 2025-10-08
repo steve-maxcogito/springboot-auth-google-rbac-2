@@ -1,11 +1,15 @@
 package com.maxcogito.auth.controller;
+import com.maxcogito.auth.domain.User;
 import com.maxcogito.auth.dto.RoleUpdateRequest;
 import com.maxcogito.auth.service.UserService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Set;
 
 @RestController
@@ -40,4 +44,6 @@ public class AdminUserController {
         userService.removeRoleFromUser(username, role);
         return ResponseEntity.noContent().build();
     }
+
+    // Remove one role
 }
