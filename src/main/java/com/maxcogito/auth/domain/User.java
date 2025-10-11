@@ -41,7 +41,18 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    private String phoneNumber;
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
+    @Column(name = "mfa_enabled", nullable = false)
+    private boolean mfaEnabled;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "mfa_method")
+    private MfaMethod mfaMethod; // EMAIL_OTP or SMS_OTP
+
+    @Column(name = "phone_number")
+    private String phoneNumber; // already in your table; ensure mapped
 
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(name = "user_roles",
@@ -105,4 +116,28 @@ public class User {
 
     public String getGoogleSub() { return googleSub; }
     public void setGoogleSub(String googleSub) { this.googleSub = googleSub; }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
+    }
+
+    public void setEmailVerified(boolean emailVerified) {
+        this.emailVerified = emailVerified;
+    }
+
+    public boolean isMfaEnabled() {
+        return mfaEnabled;
+    }
+
+    public void setMfaEnabled(boolean mfaEnabled) {
+        this.mfaEnabled = mfaEnabled;
+    }
+
+    public MfaMethod getMfaMethod() {
+        return mfaMethod;
+    }
+
+    public void setMfaMethod(MfaMethod mfaMethod) {
+        this.mfaMethod = mfaMethod;
+    }
 }
