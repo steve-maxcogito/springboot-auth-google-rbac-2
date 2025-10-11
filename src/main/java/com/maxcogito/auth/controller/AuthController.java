@@ -70,6 +70,9 @@ public class AuthController {
         var roles = saved.getRoles().stream().map(r -> r.getName()).collect(Collectors.toSet());
         String token = jwtService.createToken(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
         String rt = refreshTokenService.createToken(saved);
+        // in AuthController.register(...) — after saving user
+        verificationService.startVerificationCode(saved);
+
         return ResponseEntity.ok(new TokenPairResponse(token, saved.getUsername(), saved.getEmail(), roles, rt));
     }
 
@@ -118,6 +121,13 @@ public class AuthController {
     public ResponseEntity<?> startVerify(@Valid @RequestBody EmailRequest req) {
         var user = userService.findByUsernameOrEmail(req.getEmail()).orElseThrow(() -> new IllegalArgumentException("No user with that email"));
         verificationService.startVerification(user);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/verify/start/code")
+    public ResponseEntity<?> startVerifyCOde(@Valid @RequestBody EmailRequest req) {
+        var user = userService.findByUsernameOrEmail(req.getEmail()).orElseThrow(() -> new IllegalArgumentException("No user with that email"));
+        verificationService.startVerificationCode(user);
         return ResponseEntity.ok().build();
     }
 

@@ -1,52 +1,67 @@
 package com.maxcogito.auth.service;
 
-import com.microsoft.graph.models.BodyType;
-import com.microsoft.graph.models.EmailAddress;
-import com.microsoft.graph.models.ItemBody;
-import com.microsoft.graph.models.Message;
-import com.microsoft.graph.models.Recipient;
-import com.microsoft.graph.serviceclient.GraphServiceClient;
-import com.microsoft.graph.users.item.sendmail.SendMailPostRequestBody;
+
+import com.maxcogito.auth.ms.AadTokenProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestTemplate;
 
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class GraphMailService {
 
-    private final GraphServiceClient graph;
-    private final String senderUpnOrId;
+    private final RestTemplate rest = new RestTemplate();
+    private final AadTokenProvider tokenProvider;
 
-    public GraphMailService(GraphServiceClient graph,
-                            @Value("${msgraph.senderAddress}") String senderUpnOrId) {
-        this.graph = graph;
-        this.senderUpnOrId = senderUpnOrId; // UPN/email of mailbox or its GUID
+    @Value("${msgraph.senderAddress}")
+    private String senderAddress; // e.g. noreply@yourdomain.com
+
+    public GraphMailService(AadTokenProvider tokenProvider) {
+        this.tokenProvider = tokenProvider;
     }
 
     public void sendHtml(String to, String subject, String html) {
-        // Build message via setters (v6)
-        Message message = new Message();
-        message.setSubject(subject);
+        var url = "https://graph.microsoft.com/v1.0/users/" + senderAddress + "/sendMail";
+        var body = Map.of(
+                "message", Map.of(
+                        "subject", subject,
+                        "body", Map.of(
+                                "contentType", "HTML",
+                                "content", html
+                        ),
+                        "toRecipients", new Object[] {
+                                Map.of("emailAddress", Map.of("address", to))
+                        }
+                ),
+                "saveToSentItems", Boolean.FALSE
+        );
 
-        ItemBody body = new ItemBody();
-        // If your enum shows BodyType.Text instead of TEXT, use that constant.
-        body.setContentType(BodyType.Html);
-        body.setContent(html);
-        message.setBody(body);
-
-        EmailAddress addr = new EmailAddress();
-        addr.setAddress(to);
-        Recipient rcpt = new Recipient();
-        rcpt.setEmailAddress(addr);
-        message.setToRecipients(List.of(rcpt));
-
-        SendMailPostRequestBody req = new SendMailPostRequestBody();
-        req.setMessage(message);
-        req.setSaveToSentItems(Boolean.TRUE);
-
-        // App-only: send as the specific mailbox
-        graph.users().byUserId(senderUpnOrId).sendMail().post(req);
+        doSend(url, body, /*retryIfUnauthorized=*/true);
     }
+
+    private void doSend(String url, Object payload, boolean retry) {
+        HttpHeaders h = new HttpHeaders();
+        h.setContentType(MediaType.APPLICATION_JSON);
+        h.setBearerAuth(tokenProvider.getBearer());
+
+        try {
+            rest.exchange(url, HttpMethod.POST, new HttpEntity<>(payload, h), Void.class);
+        } catch (HttpClientErrorException.Unauthorized e) {
+            if (retry) {
+                tokenProvider.refresh(); // force refresh
+                doSend(url, payload, false);
+            } else {
+                throw e;
+            }
+        }
+    }
+
 }
