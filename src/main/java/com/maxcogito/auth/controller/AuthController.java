@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.*;
 import com.maxcogito.auth.dto.TokenPairResponse;
 import com.maxcogito.auth.dto.RefreshRequest;
 import com.maxcogito.auth.dto.EmailRequest;
+
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -68,7 +70,12 @@ public class AuthController {
         User saved = userService.registerLocal(u, req.getRoles(), req.getPassword());
 
         var roles = saved.getRoles().stream().map(r -> r.getName()).collect(Collectors.toSet());
-        String token = jwtService.createToken(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
+        var extra = Map.of(
+                "emailVerified", saved.isEmailVerified(),
+                "mfa", saved.isMfaEnabled()
+        );
+
+        String token = jwtService.createTokenOld(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
         String rt = refreshTokenService.createToken(saved);
         // in AuthController.register(...) — after saving user
         verificationService.startVerificationCode(saved);
@@ -84,7 +91,7 @@ public class AuthController {
         var principal = (UserDetailsImpl) auth.getPrincipal();
         var user = principal.getDomainUser();
         var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(Collectors.toSet());
-        String token = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        String token = jwtService.createTokenOld(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String rt = refreshTokenService.createToken(user);
         return ResponseEntity.ok(new TokenPairResponse(token, user.getUsername(), user.getEmail(), roles, rt));
     }
@@ -102,7 +109,7 @@ public class AuthController {
 
         User saved = userService.upsertGoogleUser(email, sub, givenName, familyName);
         var roles = saved.getRoles().stream().map(r -> r.getName()).collect(Collectors.toSet());
-        String token = jwtService.createToken(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
+        String token = jwtService.createTokenOld(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
         String rt = refreshTokenService.createToken(saved);
         return ResponseEntity.ok(new TokenPairResponse(token, saved.getUsername(), saved.getEmail(), roles, rt));
     }
@@ -112,7 +119,7 @@ public class AuthController {
         var old = refreshTokenService.validate(req.getRefreshToken());
         var user = old.getUser();
         var roles = user.getRoles().stream().map(r -> r.getName()).collect(java.util.stream.Collectors.toSet());
-        String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        String newAccess = jwtService.createTokenOld(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String newRefresh = refreshTokenService.createToken(user);
         return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefresh));
     }

@@ -1,5 +1,6 @@
 package com.maxcogito.auth.security;
 
+import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
@@ -21,7 +22,8 @@ public class JwtService {
     private final long expirationMinutes;
 
     public JwtService(
-            @Value("${app.jwt.secret}") String secret,
+          //  @Value("${app.jwt.secret}") String secret,
+           @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.issuer}") String issuer,
             @Value("${app.jwt.expirationMinutes}") long expirationMinutes
     ) {
@@ -34,7 +36,8 @@ public class JwtService {
         return java.util.Base64.getEncoder().encodeToString(s.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
-    public String createToken(String subject, String username, String email, Set<String> roles) {
+    public String createTokenOld(String subject, String username, String email,
+                              Set<String> roles) {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(expirationMinutes * 60);
         return Jwts.builder()
@@ -45,6 +48,32 @@ public class JwtService {
                 .claim("roles", roles)
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(exp))
+                .signWith(signingKey, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String createToken(String subject, String username, String email,
+                              Set<String> roles,
+                              Map<String, Object> extraClaims) {
+        Instant now = Instant.now();
+        Instant exp = now.plusSeconds(expirationMinutes * 60);
+
+        // Initialize builder with mandatory claims
+        JwtBuilder builder = Jwts.builder()
+                .setIssuer(issuer)
+                .setSubject(subject) // user id
+                .claim("username", username)
+                .claim("email", email)
+                .claim("roles", roles)
+                .setIssuedAt(Date.from(now))
+                .setExpiration(Date.from(exp));
+
+        // ✅ Add this conditional section here
+        if (extraClaims != null && !extraClaims.isEmpty()) {
+            extraClaims.forEach(builder::claim);
+        }
+
+        return builder
                 .signWith(signingKey, SignatureAlgorithm.HS256)
                 .compact();
     }
