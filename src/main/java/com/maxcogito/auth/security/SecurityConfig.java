@@ -30,7 +30,7 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**", "/actuator/health","/api/test/**","/api/dev/**").permitAll()
+                .requestMatchers("/auth/**", "/api/auth/verify/**", "/actuator/health","/api/test/**","/api/dev/**").permitAll()
                 .anyRequest().authenticated()
             )
             .authenticationProvider(daoAuthenticationProvider())

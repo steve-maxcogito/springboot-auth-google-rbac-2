@@ -2,6 +2,8 @@ package com.maxcogito.auth.domain;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
+
+import java.time.Instant;
 import java.util.*;
 
 @Entity
@@ -46,6 +48,15 @@ public class User {
 
     @Column(name = "mfa_enabled", nullable = false)
     private boolean mfaEnabled;
+
+    @Column(name = "mfa_required", nullable = false)
+    private boolean mfaRequired = false;
+
+    @Column(name = "mfa_enrolled", nullable = false)
+    private boolean mfaEnrolled= false;
+
+    @Column(name= "mfa_enforced_at", nullable = true)
+    private Instant mfaEnforcedAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "mfa_method")
@@ -139,5 +150,37 @@ public class User {
 
     public void setMfaMethod(MfaMethod mfaMethod) {
         this.mfaMethod = mfaMethod;
+    }
+
+    public boolean isMfaRequired() {
+        return mfaRequired;
+    }
+
+    public boolean getMfaRequired() {
+        return mfaRequired;
+    }
+
+    public void setMfaRequired(boolean mfaRequired) {
+        this.mfaRequired = mfaRequired;
+    }
+
+    public boolean isMfaEnrolled() {
+        return mfaEnrolled;
+    }
+
+    public boolean getMfaEnrolled() {
+        return mfaEnrolled;
+    }
+
+    public void setMfaEnrolled(boolean mfaEnrolled) {
+        this.mfaEnrolled = mfaEnrolled;
+    }
+
+    public Instant getMfaEnforcedAt() {
+        return mfaEnforcedAt;
+    }
+
+    public void setMfaEnforcedAt(Instant mfaEnforcedAt) {
+        this.mfaEnforcedAt = mfaEnforcedAt;
     }
 }

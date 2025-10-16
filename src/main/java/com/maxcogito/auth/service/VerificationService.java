@@ -2,12 +2,17 @@ package com.maxcogito.auth.service;
 
 import com.maxcogito.auth.domain.User;
 import com.maxcogito.auth.domain.VerificationToken;
+import com.maxcogito.auth.errors.InvalidTokenException;
+import com.maxcogito.auth.errors.TokenAlreadyUsedException;
+import com.maxcogito.auth.errors.TokenExpiredException;
 import com.maxcogito.auth.repo.UserRepository;
 import com.maxcogito.auth.repo.VerificationTokenRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
@@ -46,11 +51,13 @@ public class VerificationService {
         // Invalidate any prior tokens
         repo.deleteByUserId(user.getId());
 
-        String token = UUID.randomUUID().toString().replace("-", "");
+        String raw = newToken();
+        String hash = sha256(raw);
+        //String token = UUID.randomUUID().toString().replace("-", "");
         Instant expiresAt = Instant.now().plus(TTL);
 
         VerificationToken vt = new VerificationToken();
-        vt.setToken(token);
+        vt.setToken(hash);
         vt.setUser(user);
         vt.setExpiresAt(expiresAt);
         vt.setUsed(false);
@@ -65,7 +72,7 @@ public class VerificationService {
             <p>This code expires in %d minutes.</p>
             <p>If you didn’t request this, you can ignore this email.</p>
         """.formatted(user.getFirstName() == null ? user.getUsername() : user.getFirstName(),
-                token, TTL.toMinutes());
+                hash, TTL.toMinutes());
 
         // send
         mailer.sendHtml(user.getEmail(), subject, html);
@@ -73,11 +80,47 @@ public class VerificationService {
 
     @Transactional
     public void confirmCode(String token) {
-        var vt = repo.findByToken(token).orElseThrow(() -> new IllegalArgumentException("Invalid token"));
-        if (vt.isUsed() || vt.getExpiresAt().isBefore(Instant.now())) {
-            throw new IllegalArgumentException("Token expired or already used");
+        var vt = repo.findByToken(token).orElseThrow(() -> new InvalidTokenException());
+        //var vt = repo.findByToken(token).orElseThrow(InvalidTokenException::new);
+        if (vt.getExpiresAt().isBefore(Instant.now())) {
+            throw new TokenExpiredException();
         }
+        if (vt.isUsed()) {
+            throw new TokenAlreadyUsedException();
+        }
+
         vt.setUsed(true);
+        User user = vt.getUser();
+        if (!user.isEmailVerified()) {
+        user.setEmailVerified(true);
+        }
+        user.setMfaEnrolled(true);
+        userRepo.save(user);
+        repo.save(vt);
+        // (Optional) You could track a 'verified' flag on User; add field if desired.
+        // For simplicity, we don't block login on unverified status in this sample.
+    }
+
+    @Transactional
+    public void confirmVerifyLink(String token) {
+        //var vt = repo.findByToken(token).orElseThrow(() -> new IllegalArgumentException("Invalid token"));
+        var vt = repo.findByToken(token).orElseThrow(() -> new InvalidTokenException());
+
+        if (vt.getExpiresAt().isBefore(Instant.now())) {
+            throw new TokenExpiredException();
+        }
+        if (vt.isUsed()) {
+            throw new TokenAlreadyUsedException();
+        }
+
+        vt.setUsed(true);
+        User user = vt.getUser();
+        if (!user.isEmailVerified()) {
+            // user.setEmailVerified(true);
+            user.setEmailVerified(true);
+        }
+        user.setMfaEnrolled(true);
+        userRepo.save(user);
         repo.save(vt);
         // (Optional) You could track a 'verified' flag on User; add field if desired.
         // For simplicity, we don't block login on unverified status in this sample.
@@ -85,13 +128,22 @@ public class VerificationService {
 
     @Transactional
     public void startVerification(User user) {
+
+        repo.deleteByUserId(user.getId());
+
+        // Strong, URL-safe token (128 bits -> 22 chars base64url w/out padding)
+        String raw = newToken();
+        String hash = sha256(raw);
+
+        Instant expiresAt = Instant.now().plus(TTL);
+
         VerificationToken vt = new VerificationToken();
         vt.setUser(user);
         vt.setToken(generate());
         vt.setExpiresAt(Instant.now().plus(ttlMinutes, ChronoUnit.MINUTES));
         repo.save(vt);
 
-        String link = frontendBaseUrl + "/verify-email?token=" + vt.getToken();
+        String link = frontendBaseUrl + "/api/auth/verify/confirmLink?token=" + vt.getToken();
         String body = "Hello " + (user.getFirstName()!=null?user.getFirstName():"") + ",\n\n"
                 + "Please verify your email by clicking the link: " + link + "\n\n"
                 + "This link expires in " + ttlMinutes + " minutes.";
@@ -110,9 +162,29 @@ public class VerificationService {
         // For simplicity, we don't block login on unverified status in this sample.
     }
 
+    private static String newToken() {
+        byte[] b = new byte[16]; // 128 bits
+        new java.security.SecureRandom().nextBytes(b);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    }
+
+    private static String sha256(String s) {
+        MessageDigest md = null;
+        try {
+            md = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+        return java.util.HexFormat.of().formatHex(md.digest(s.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+
     private String generate() {
         byte[] b = new byte[32];
         sr.nextBytes(b);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(b);
+    }
+
+    private static String urlEncode(String s) {
+        return java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8);
     }
 }

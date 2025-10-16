@@ -34,12 +34,14 @@ public class AuthController {
     private final UserDetailsServiceImpl userDetailsService;
     private final com.maxcogito.auth.service.RefreshTokenService refreshTokenService;
     private final com.maxcogito.auth.service.VerificationService verificationService;
+    private final com.maxcogito.auth.config.MfaProperties mfaProperties;
 
     public AuthController(AuthenticationManager authenticationManager,
                           UserService userService,
                           JwtService jwtService,
                           GoogleTokenVerifier googleTokenVerifier,
                           UserDetailsServiceImpl userDetailsService,
+                          com.maxcogito.auth.config.MfaProperties mfaProperties,
                           com.maxcogito.auth.service.RefreshTokenService refreshTokenService,
                           com.maxcogito.auth.service.VerificationService verificationService) {
         this.authenticationManager = authenticationManager;
@@ -49,9 +51,10 @@ public class AuthController {
         this.userDetailsService = userDetailsService;
         this.refreshTokenService = refreshTokenService;
         this.verificationService = verificationService;
+        this.mfaProperties = mfaProperties;
     }
 
-    @PostMapping("/register")
+    @PostMapping("/register/user")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest req) {
         User u = new User();
         u.setUsername(req.getUsername());
@@ -67,20 +70,40 @@ public class AuthController {
         u.setCountry(req.getCountry());
         u.setPhoneNumber(req.getPhoneNumber());
 
+        // Persist user (hashing etc.)
         User saved = userService.registerLocal(u, req.getRoles(), req.getPassword());
 
-        var roles = saved.getRoles().stream().map(r -> r.getName()).collect(Collectors.toSet());
-        var extra = Map.of(
-                "emailVerified", saved.isEmailVerified(),
-                "mfa", saved.isMfaEnabled()
-        );
+        // Apply MFA policy (request override → global default)
+        boolean requireMfa = (req.getMfaRequired() != null)
+                ? req.getMfaRequired()
+                : mfaProperties.required(); // inject MfaProperties
 
-        String token = jwtService.createTokenOld(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
-        String rt = refreshTokenService.createToken(saved);
-        // in AuthController.register(...) — after saving user
+        saved.setMfaRequired(requireMfa);
+        // saved.setMfaEnabled(false); // stays false until enrollment verifies
+        userService.save(saved);
+
+        // Start email verification (link or code)
         verificationService.startVerificationCode(saved);
 
-        return ResponseEntity.ok(new TokenPairResponse(token, saved.getUsername(), saved.getEmail(), roles, rt));
+        var roles = saved.getRoles().stream().map(r -> r.getName()).collect(Collectors.toSet());
+
+        // Issue onboarding/pre-MFA token
+        String onboarding = jwtService.createOnboardingToken(
+                saved.getId().toString(),
+                saved.getUsername(),
+                saved.getEmail(),
+                roles,
+                mfaProperties.onboardingTtlMinutes(),   // e.g., 10
+                requireMfa
+        );
+
+        // Do NOT create refresh yet; user is not fully authenticated
+        return ResponseEntity.ok(Map.of(
+                "onboardingToken", onboarding,
+                "expiresInSeconds", mfaProperties.onboardingTtlMinutes() * 60,
+                "emailVerificationRequired", true,
+                "mfaRequired", requireMfa
+        ));
     }
 
     @PostMapping("/login")
@@ -91,7 +114,7 @@ public class AuthController {
         var principal = (UserDetailsImpl) auth.getPrincipal();
         var user = principal.getDomainUser();
         var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(Collectors.toSet());
-        String token = jwtService.createTokenOld(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        String token = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String rt = refreshTokenService.createToken(user);
         return ResponseEntity.ok(new TokenPairResponse(token, user.getUsername(), user.getEmail(), roles, rt));
     }
@@ -109,7 +132,7 @@ public class AuthController {
 
         User saved = userService.upsertGoogleUser(email, sub, givenName, familyName);
         var roles = saved.getRoles().stream().map(r -> r.getName()).collect(Collectors.toSet());
-        String token = jwtService.createTokenOld(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
+        String token = jwtService.createToken(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
         String rt = refreshTokenService.createToken(saved);
         return ResponseEntity.ok(new TokenPairResponse(token, saved.getUsername(), saved.getEmail(), roles, rt));
     }
@@ -119,7 +142,7 @@ public class AuthController {
         var old = refreshTokenService.validate(req.getRefreshToken());
         var user = old.getUser();
         var roles = user.getRoles().stream().map(r -> r.getName()).collect(java.util.stream.Collectors.toSet());
-        String newAccess = jwtService.createTokenOld(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String newRefresh = refreshTokenService.createToken(user);
         return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefresh));
     }
@@ -132,15 +155,9 @@ public class AuthController {
     }
 
     @PostMapping("/verify/start/code")
-    public ResponseEntity<?> startVerifyCOde(@Valid @RequestBody EmailRequest req) {
+    public ResponseEntity<?> startVerifyCode(@Valid @RequestBody EmailRequest req) {
         var user = userService.findByUsernameOrEmail(req.getEmail()).orElseThrow(() -> new IllegalArgumentException("No user with that email"));
         verificationService.startVerificationCode(user);
-        return ResponseEntity.ok().build();
-    }
-
-    @PostMapping("/verify/confirm")
-    public ResponseEntity<?> confirmVerify(@RequestParam("token") String token) {
-        verificationService.confirm(token);
         return ResponseEntity.ok().build();
     }
 

@@ -34,6 +34,11 @@ public class UserService {
     }
 
     @Transactional
+    public User save(User user) {
+        return userRepository.save(user);
+    };
+
+    @Transactional
     public void setRolesForUser(String username, Set<String> roleNames) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UserNotFoundException("User not found: " + username));

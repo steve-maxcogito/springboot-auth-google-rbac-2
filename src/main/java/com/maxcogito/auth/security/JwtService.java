@@ -22,34 +22,19 @@ public class JwtService {
     private final long expirationMinutes;
 
     public JwtService(
-          //  @Value("${app.jwt.secret}") String secret,
-           @Value("${app.jwt.secret}") String secret,
+            @Value("${app.jwt.secret}") String secretBase64,        // already Base64 !!!
             @Value("${app.jwt.issuer}") String issuer,
             @Value("${app.jwt.expirationMinutes}") long expirationMinutes
     ) {
-        this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(toBase64(secret)));
+        // ✅ FIX: decode the provided Base64 secret directly
+        this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secretBase64));
         this.issuer = issuer;
         this.expirationMinutes = expirationMinutes;
     }
 
-    private static String toBase64(String s) {
-        return java.util.Base64.getEncoder().encodeToString(s.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    }
-
-    public String createTokenOld(String subject, String username, String email,
+    public String createToken(String subject, String username, String email,
                               Set<String> roles) {
-        Instant now = Instant.now();
-        Instant exp = now.plusSeconds(expirationMinutes * 60);
-        return Jwts.builder()
-                .setIssuer(issuer)
-                .setSubject(subject) // user id
-                .claim("username", username)
-                .claim("email", email)
-                .claim("roles", roles)
-                .setIssuedAt(Date.from(now))
-                .setExpiration(Date.from(exp))
-                .signWith(signingKey, SignatureAlgorithm.HS256)
-                .compact();
+        return createToken(subject, username, email, roles, Map.of());
     }
 
     public String createToken(String subject, String username, String email,
@@ -58,7 +43,6 @@ public class JwtService {
         Instant now = Instant.now();
         Instant exp = now.plusSeconds(expirationMinutes * 60);
 
-        // Initialize builder with mandatory claims
         JwtBuilder builder = Jwts.builder()
                 .setIssuer(issuer)
                 .setSubject(subject) // user id
@@ -68,12 +52,30 @@ public class JwtService {
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(exp));
 
-        // ✅ Add this conditional section here
         if (extraClaims != null && !extraClaims.isEmpty()) {
             extraClaims.forEach(builder::claim);
         }
 
-        return builder
+        return builder.signWith(signingKey, SignatureAlgorithm.HS256).compact();
+    }
+
+    /** Short-lived, limited-scope token for onboarding (email verify + MFA setup). */
+    public String createOnboardingToken(String subject, String username, String email,
+                                        Set<String> roles, int ttlMinutes, boolean mfaRequired) {
+        Instant now = Instant.now();
+        Instant exp = now.plusSeconds(ttlMinutes * 60L);
+
+        return Jwts.builder()
+                .setIssuer(issuer)
+                .setSubject(subject)
+                .claim("username", username)
+                .claim("email", email)
+                .claim("roles", roles)
+                .claim("scope", mfaRequired ? "onboarding mfa_required" : "onboarding")
+                .claim("mfa_verified", false)
+                .claim("email_verified", false)
+                .setIssuedAt(Date.from(now))
+                .setExpiration(Date.from(exp))
                 .signWith(signingKey, SignatureAlgorithm.HS256)
                 .compact();
     }

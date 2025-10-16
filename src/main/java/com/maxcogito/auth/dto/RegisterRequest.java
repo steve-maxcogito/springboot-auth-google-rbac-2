@@ -21,6 +21,8 @@ public class RegisterRequest {
     private String middleName;
     private String lastName;
 
+    private Boolean mfaRequired;
+
     private String addressLine1;
     private String addressLine2;
     private String city;
@@ -73,4 +75,11 @@ public class RegisterRequest {
 
     public Set<String> getRoles() { return roles; }
     public void setRoles(Set<String> roles) { this.roles = roles; }
+
+    public Boolean getMfaRequired() {
+        return mfaRequired;
+    }
+    public void setMfaRequired(Boolean mfaRequired) {
+        this.mfaRequired = mfaRequired;
+    }
 }
