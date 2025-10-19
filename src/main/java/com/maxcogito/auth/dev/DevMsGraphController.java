@@ -15,7 +15,7 @@ import java.util.Map;
 
 @Validated
 @RestController
-@RequestMapping("/api/dev/msgraph")
+@RequestMapping("/api/v1/dev/msgraph")
 @Profile("dev")
 public class DevMsGraphController {
     private final AadTokenProvider tokenProvider;

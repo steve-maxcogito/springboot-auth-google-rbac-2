@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class UserService {
@@ -45,6 +46,16 @@ public class UserService {
         Set<Role> roles = resolveRoles(roleNames);
         user.setRoles(roles);          // assuming User has setRoles(Set<Role>)
         userRepository.save(user);
+    }
+
+    @Transactional
+    public Set<Role> setRolesListForUser(String username, Set<String> roleNames) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + username));
+        Set<Role> roles = resolveRoles(roleNames);
+        user.setRoles(roles);// assuming User has setRoles(Set<Role>)
+        userRepository.save(user);
+        return(roles);
     }
 
     // UserService.java
@@ -82,6 +93,19 @@ public class UserService {
                 .orElseThrow(() -> new RoleNotFoundException("Role not found: " + roleName));
         user.getRoles().remove(role);
         userRepository.save(user);
+    }
+
+    @Transactional
+    public Set<Role> removeRoleSetFromUser(String username, String roleName) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + username));
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new RoleNotFoundException("Role not found: " + roleName));
+        user.getRoles().remove(role);
+        Set<Role> roleSet = new HashSet<>();
+        roleSet.add(role);
+        userRepository.save(user);
+        return roleSet;
     }
 
     @Transactional

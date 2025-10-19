@@ -9,6 +9,8 @@ import com.maxcogito.auth.security.UserDetailsImpl;
 import com.maxcogito.auth.security.UserDetailsServiceImpl;
 import com.maxcogito.auth.service.UserService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -24,9 +26,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 public class AuthController {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private final AuthenticationManager authenticationManager;
     private final UserService userService;
     private final JwtService jwtService;
@@ -108,14 +111,19 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req) {
+        log.info("Received login request: {}", req.getUsernameOrEmail());
         Authentication auth = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(req.getUsernameOrEmail(), req.getPassword()));
         SecurityContextHolder.getContext().setAuthentication(auth);
+        log.info("Authenticated user: {}", auth.getPrincipal());
         var principal = (UserDetailsImpl) auth.getPrincipal();
         var user = principal.getDomainUser();
+        log.info("Logged in user: {}", user.getUsername());
         var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(Collectors.toSet());
         String token = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String rt = refreshTokenService.createToken(user);
+        log.info("Token from login: "+token.toString());
+        log.info("refresh token: "+rt.toString());
         return ResponseEntity.ok(new TokenPairResponse(token, user.getUsername(), user.getEmail(), roles, rt));
     }
 

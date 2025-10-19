@@ -30,7 +30,12 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**", "/api/auth/verify/**", "/actuator/health","/api/test/**","/api/dev/**").permitAll()
+                .requestMatchers(
+                        "/api/v1/auth/**",
+                        "/actuator/health",
+                        "/api/v1/test/**",
+                        "/api/v1/dev/**")
+                    .permitAll().requestMatchers("/api/v1/admin/**").hasRole("ADMIN")   // <-- defense-in-depth
                 .anyRequest().authenticated()
             )
             .authenticationProvider(daoAuthenticationProvider())

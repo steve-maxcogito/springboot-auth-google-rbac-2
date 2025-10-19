@@ -3,10 +3,13 @@ package com.maxcogito.auth.service;
 import com.maxcogito.auth.domain.PasswordResetToken;
 import com.maxcogito.auth.repo.PasswordResetTokenRepository;
 import com.maxcogito.auth.repo.UserRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -18,17 +21,20 @@ public class PasswordResetService {
     private final PasswordResetTokenRepository tokenRepo;
     private final GraphMailService mailer;
     private final PasswordEncoder encoder;
+    private final String frontendBaseUrl;
 
     private static final Duration TTL = Duration.ofMinutes(15);
 
     public PasswordResetService(UserRepository userRepo,
                                 PasswordResetTokenRepository tokenRepo,
                                 GraphMailService mailer,
-                                PasswordEncoder encoder) {
+                                PasswordEncoder encoder,
+                                @Value("${app.frontendBaseUrl:http://localhost:5173}") String frontendBaseUrl) {
         this.userRepo = userRepo;
         this.tokenRepo = tokenRepo;
         this.mailer = mailer;
         this.encoder = encoder;
+        this.frontendBaseUrl = frontendBaseUrl;
     }
 
     @Transactional
@@ -41,7 +47,8 @@ public class PasswordResetService {
 
         String token = UUID.randomUUID().toString().replace("-", "");
         var prt = new PasswordResetToken();
-        prt.setToken(token);
+        String hash = sha256(token);
+        prt.setToken(hash);
         prt.setUser(user);
         prt.setExpiresAt(Instant.now().plus(TTL));
         tokenRepo.save(prt);
@@ -54,7 +61,7 @@ public class PasswordResetService {
             <p>This code expires in %d minutes.</p>
             <p>If you didn’t request this, you can ignore this email.</p>
         """.formatted(user.getFirstName() == null ? user.getUsername() : user.getFirstName(),
-                token, TTL.toMinutes());
+                hash, TTL.toMinutes());
 
         mailer.sendHtml(user.getEmail(), subject, html);
     }
@@ -74,6 +81,16 @@ public class PasswordResetService {
 
         prt.setConsumed(true);
         tokenRepo.save(prt);
+    }
+
+    private static String sha256(String s) {
+        MessageDigest md = null;
+        try {
+            md = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        }
+        return java.util.HexFormat.of().formatHex(md.digest(s.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     }
 
 }

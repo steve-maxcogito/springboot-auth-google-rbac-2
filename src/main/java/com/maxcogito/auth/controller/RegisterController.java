@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 
 // RegisterController.java
 @RestController
-@RequestMapping("/auth")
+@RequestMapping("/api/v1/auth")
 public class RegisterController {
     private final PasswordEncoder pw;
     private final JwtService jwtService;

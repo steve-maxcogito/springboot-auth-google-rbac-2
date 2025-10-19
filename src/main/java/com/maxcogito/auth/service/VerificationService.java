@@ -139,11 +139,11 @@ public class VerificationService {
 
         VerificationToken vt = new VerificationToken();
         vt.setUser(user);
-        vt.setToken(generate());
+        vt.setToken(hash);
         vt.setExpiresAt(Instant.now().plus(ttlMinutes, ChronoUnit.MINUTES));
         repo.save(vt);
 
-        String link = frontendBaseUrl + "/api/auth/verify/confirmLink?token=" + vt.getToken();
+        String link = frontendBaseUrl + "/api/v1/auth/verify/confirmLink?token=" + vt.getToken();
         String body = "Hello " + (user.getFirstName()!=null?user.getFirstName():"") + ",\n\n"
                 + "Please verify your email by clicking the link: " + link + "\n\n"
                 + "This link expires in " + ttlMinutes + " minutes.";

@@ -2,16 +2,16 @@ package com.maxcogito.auth.controller;
 
 import com.maxcogito.auth.dto.PasswordResetConfirmRequest;
 import com.maxcogito.auth.dto.PasswordResetStartRequest;
+import com.maxcogito.auth.errors.InvalidTokenException;
+import com.maxcogito.auth.errors.TokenAlreadyUsedException;
+import com.maxcogito.auth.errors.TokenExpiredException;
 import com.maxcogito.auth.service.PasswordResetService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/auth/password")
+@RequestMapping("/api/v1/auth/password")
 public class PasswordResetController {
     private final PasswordResetService service;
 
@@ -23,6 +23,7 @@ public class PasswordResetController {
     @PostMapping("/forgot")
     public ResponseEntity<Void> forgot(@Valid @RequestBody PasswordResetStartRequest req) {
         service.start(req.email());
+        //service.startLinkVerify(req.email());
         return ResponseEntity.accepted().build(); // 202 Accepted
     }
 
@@ -32,5 +33,6 @@ public class PasswordResetController {
         service.confirm(req.token(), req.newPassword());
         return ResponseEntity.noContent().build(); // 204
     }
+
 
 }
