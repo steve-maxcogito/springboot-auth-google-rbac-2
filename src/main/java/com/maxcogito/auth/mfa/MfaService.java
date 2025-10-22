@@ -1,5 +1,6 @@
 package com.maxcogito.auth.mfa;
 
+import com.maxcogito.auth.config.MfaProperties;
 import com.maxcogito.auth.domain.MfaChallenge;
 import com.maxcogito.auth.domain.MfaMethod;
 import com.maxcogito.auth.domain.User;
@@ -24,62 +25,80 @@ public class MfaService {
     private final EmailService mail;
     private final SmsService sms;
     private final Clock clock;
+    private final MfaProperties props;
 
-    @Value("${app.mfa.login.ttlMinutes:10}")
-    private int ttlMinutes;
+    // You can make this configurable if you want attempts in properties too.
 
-    @Value("${app.mfa.login.maxAttempts:5}")
-    private int maxAttempts;
-
-    @Value("${app.mfa.resend.cooldownSeconds:60}")
-    private int resendCooldownSeconds;
-
-    public MfaService(MfaChallengeRepository repo, OtpGenerator otp, PasswordEncoder encoder,
-                      EmailService mail, SmsService sms, Clock clock) {
-        this.repo = repo; this.otp = otp; this.encoder = encoder;
-        this.mail = mail; this.sms = sms; this.clock = clock;
+    public MfaService(MfaChallengeRepository repo,
+                      OtpGenerator otp,
+                      PasswordEncoder encoder,
+                      EmailService mail,
+                      SmsService sms,
+                      Clock clock,
+                      MfaProperties props) {
+        this.repo = repo;
+        this.otp = otp;
+        this.encoder = encoder;
+        this.mail = mail;
+        this.sms = sms;
+        this.clock = clock;
+        this.props = props;
     }
 
     public MfaChallenge startLoginChallenge(User user) {
         var latest = repo.findFirstByUserAndPurposeOrderByCreatedAtDesc(user, "LOGIN_MFA").orElse(null);
         if (latest != null && latest.getCreatedAt()
-                .isAfter(Instant.now(clock).minus(resendCooldownSeconds, ChronoUnit.SECONDS))) {
-            return latest; // throttle: reuse last in cooldown window
+                .isAfter(Instant.now(clock).minus(props.resendCooldownSeconds(), ChronoUnit.SECONDS))) {
+            return latest; // throttle: reuse last within cooldown
         }
 
         String code = otp.generate6();
         var ch = new MfaChallenge();
         ch.setUser(user);
         ch.setCodeHash(encoder.encode(code));
-        ch.setExpiresAt(Instant.now(clock).plus(ttlMinutes, ChronoUnit.MINUTES));
+        ch.setExpiresAt(Instant.now(clock).plus(props.loginTtlMinutes(), ChronoUnit.MINUTES));
         ch.setAttempts(0);
         ch.setPurpose("LOGIN_MFA");
         ch = repo.save(ch);
 
-        // deliver
-        if (user.getMfaMethod() == MfaMethod.EMAIL_OTP) {
-            mail.send(user.getEmail(), "Your login code",
-                    "Your verification code is: " + code + " (valid " + ttlMinutes + " minutes)");
-        } else if (user.getMfaMethod() == MfaMethod.SMS_OTP) {
-            if (user.getPhoneNumber() == null || user.getPhoneNumber().isBlank()) {
-                throw new IllegalArgumentException("User has no phone number on file");
-            }
-            sms.send(user.getPhoneNumber(), "Your code: " + code + " (valid " + ttlMinutes + "m)");
-        } else {
-            throw new IllegalStateException("Unsupported MFA method: " + user.getMfaMethod());
-        }
+        deliverCode(user, code, props.loginTtlMinutes());
         return ch;
+    }
+
+    private void deliverCode(User user, String code, int ttlMinutes) {
+        MfaMethod method = user.getMfaMethod();
+        if (method == null) {
+            // Fallback to global default if user preference is unset
+            method = "sms".equalsIgnoreCase(props.method()) ? MfaMethod.SMS_OTP : MfaMethod.EMAIL_OTP;
+        }
+
+        switch (method) {
+            case EMAIL_OTP -> mail.send(
+                    user.getEmail(),
+                    "Your login code",
+                    "Your verification code is: " + code + " (valid " + ttlMinutes + " minutes)"
+            );
+            case SMS_OTP -> {
+                var phone = user.getPhoneNumber();
+                if (phone == null || phone.isBlank()) {
+                    throw new IllegalArgumentException("User has no phone number on file");
+                }
+                sms.send(phone, "Your code: " + code + " (valid " + ttlMinutes + "m)");
+            }
+            default -> throw new IllegalStateException("Unsupported MFA method: " + method);
+        }
     }
 
     public User verifyLoginCode(User user, UUID challengeId, String code) {
         var ch = repo.findById(challengeId)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid challenge"));
+
         if (!ch.getUser().getId().equals(user.getId())) {
             throw new IllegalArgumentException("Challenge not for this user");
         }
         var now = Instant.now(clock);
         if (now.isAfter(ch.getExpiresAt())) throw new IllegalArgumentException("Code expired");
-        if (ch.getAttempts() >= maxAttempts) throw new IllegalArgumentException("Too many attempts");
+        if (ch.getAttempts() >= props.maxAttempts()) throw new IllegalArgumentException("Too many attempts");
 
         ch.setAttempts(ch.getAttempts() + 1);
         repo.save(ch);
@@ -88,7 +107,37 @@ public class MfaService {
             throw new IllegalArgumentException("Invalid code");
         }
 
-        repo.delete(ch); // one-time use, success
+        repo.delete(ch); // one-time use
         return user;
     }
+
+    // Add these to your existing MfaService
+
+    public User verifyLoginCode(UUID challengeId, String code) {
+        var ch = repo.findById(challengeId)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid challenge"));
+
+        var now = Instant.now(clock);
+        if (now.isAfter(ch.getExpiresAt())) throw new IllegalArgumentException("Code expired");
+        if (ch.getAttempts() >= props.maxAttempts()) throw new IllegalArgumentException("Too many attempts");
+
+        ch.setAttempts(ch.getAttempts() + 1);
+        repo.save(ch);
+
+        if (!encoder.matches(code, ch.getCodeHash())) {
+            throw new IllegalArgumentException("Invalid code");
+        }
+
+        var user = ch.getUser();
+        repo.delete(ch); // one-time use on success
+        return user;
+    }
+
+    /** Helper for resend-by-challenge flows */
+    public User userForChallenge(UUID challengeId) {
+        var ch = repo.findById(challengeId)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid challenge"));
+        return ch.getUser();
+    }
+
 }

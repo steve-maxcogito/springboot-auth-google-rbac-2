@@ -6,5 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record MfaProperties(boolean required,          // app.mfa.required=true/false
                             int loginTtlMinutes, //app.mfa.login.ttlMinutes,
                             int resendCooldownSeconds, // app.mfa.resend.cooldownSeconds
-                            int onboardingTtlMinutes )  // app.mfa.onboarding.ttlMinutes
+                            int onboardingTtlMinutes,
+                            int maxAttempts,
+                            String method)  // app.mfa.method=[email,sms]
  {}

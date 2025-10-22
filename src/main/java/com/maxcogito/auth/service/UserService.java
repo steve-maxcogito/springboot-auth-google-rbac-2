@@ -11,10 +11,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -163,5 +160,21 @@ public class UserService {
         Set<Role> roles = new HashSet<>();
         roles.add(roleRepository.findByName("ROLE_USER").orElseGet(() -> roleRepository.save(new Role("ROLE_USER"))));
         return roles;
+    }
+
+    public User loadDomainUserById(UUID id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + id));
+    }
+
+    public User loadDomainUserByUsernameOrEmail(String userOrEmail) {
+        return userRepository.findByUsername(userOrEmail)
+                .or(() -> userRepository.findByEmail(userOrEmail))
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + userOrEmail));
+    }
+
+    public User loadDomainUserByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + username));
     }
 }
