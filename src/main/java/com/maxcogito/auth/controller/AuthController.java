@@ -1,6 +1,7 @@
 package com.maxcogito.auth.controller;
 
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
+import com.maxcogito.auth.domain.Role;
 import com.maxcogito.auth.domain.User;
 import com.maxcogito.auth.dto.*;
 import com.maxcogito.auth.google.GoogleTokenVerifier;
@@ -23,7 +24,10 @@ import com.maxcogito.auth.dto.RefreshRequest;
 import com.maxcogito.auth.dto.EmailRequest;
 
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static java.util.stream.Collectors.toSet;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -88,7 +92,7 @@ public class AuthController {
         // Start email verification (link or code)
         verificationService.startVerificationCode(saved);
 
-        var roles = saved.getRoles().stream().map(r -> r.getName()).collect(Collectors.toSet());
+        var roles = saved.getRoles().stream().map(r -> r.getName()).collect(toSet());
 
         // Issue onboarding/pre-MFA token
         String onboarding = jwtService.createOnboardingToken(
@@ -119,7 +123,7 @@ public class AuthController {
         var principal = (UserDetailsImpl) auth.getPrincipal();
         var user = principal.getDomainUser();
         log.info("Logged in user: {}", user.getUsername());
-        var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(Collectors.toSet());
+        var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(toSet());
         String token = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String rt = refreshTokenService.createToken(user);
         log.info("Token from login: "+token.toString());
@@ -139,7 +143,7 @@ public class AuthController {
         String familyName = (String) payload.get("family_name");
 
         User saved = userService.upsertGoogleUser(email, sub, givenName, familyName);
-        var roles = saved.getRoles().stream().map(r -> r.getName()).collect(Collectors.toSet());
+        var roles = saved.getRoles().stream().map(r -> r.getName()).collect(toSet());
         String token = jwtService.createToken(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
         String rt = refreshTokenService.createToken(saved);
         return ResponseEntity.ok(new TokenPairResponse(token, saved.getUsername(), saved.getEmail(), roles, rt));
@@ -149,9 +153,29 @@ public class AuthController {
     public ResponseEntity<?> refresh(@Valid @RequestBody RefreshRequest req) {
         var old = refreshTokenService.validate(req.getRefreshToken());
         var user = old.getUser();
-        var roles = user.getRoles().stream().map(r -> r.getName()).collect(java.util.stream.Collectors.toSet());
+        var roles = user.getRoles().stream().map(r -> r.getName()).collect(toSet());
         String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String newRefresh = refreshTokenService.createToken(user);
+        return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefresh));
+    }
+
+    @PostMapping("/token/refresh")
+    public ResponseEntity<?> refreshToken(@Valid @RequestBody RefreshRequest req) {
+        var claims = jwtService.parseClaims(req.getRefreshToken());
+        if (!"refresh".equals(claims.get("token_type"))) {
+            return ResponseEntity.status(401).body(Map.of("error","invalid_refresh_token"));
+        }
+        var userId = UUID.fromString(claims.getSubject());
+        var user = userService.loadDomainUserById(userId);
+
+        var roles = user.getRoles().stream().map(Role::getName).collect(toSet());
+        // ✅ Preserve/force MFA on refreshed access tokens
+        boolean mfa = Boolean.TRUE.equals(claims.get("mfa")); // or just set to true if your policy requires it
+        var extra = java.util.Map.<String, Object>of("mfa", mfa);
+
+        var newAccess  = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        var newRefresh = jwtService.createRefreshToken(user); // rotate
+
         return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefresh));
     }
 
@@ -181,7 +205,7 @@ public class AuthController {
         if (auth == null || !auth.isAuthenticated()) return ResponseEntity.status(401).build();
         var principal = (UserDetailsImpl) userDetailsService.loadUserByUsername(auth.getName());
         var user = principal.getDomainUser();
-        var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(Collectors.toSet());
+        var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(toSet());
         return ResponseEntity.ok(new JwtResponse("",
                 user.getUsername(), user.getEmail(), roles));
     }

@@ -2,7 +2,9 @@ package com.maxcogito.auth.controller;
 
 
 import com.maxcogito.auth.config.MfaProperties;
+import com.maxcogito.auth.domain.Role;
 import com.maxcogito.auth.domain.User;
+import com.maxcogito.auth.dto.TokenPairResponse;
 import com.maxcogito.auth.mfa.MfaService;
 import com.maxcogito.auth.security.JwtService;
 import com.maxcogito.auth.service.UserService;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -55,11 +58,17 @@ public class MfaController {
         //var springUser = (org.springframework.security.core.userdetails.User) auth.getPrincipal();
         User user = userService.loadDomainUserByUsername(username);
 
-        boolean requiresMfa = mfaProps.required() || Boolean.TRUE.equals(user.isMfaRequired());
+        //boolean requiresMfa = mfaProps.required() || Boolean.TRUE.equals(user.isMfaRequired());
+        boolean requiresMfa = mfaProps.required();
         if (!requiresMfa) {
             // MFA not required -> issue full tokens immediately
-            var tokens = jwtService.issueTokenPair(user, Map.of("mfa", true));
-            return ResponseEntity.ok(tokens);
+                var roles = user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
+                var extra = java.util.Map.<String, Object>of("mfa", true);
+                var access  = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+                var refresh = jwtService.createRefreshToken(user);
+                return ResponseEntity.ok(new TokenPairResponse(access, user.getUsername(), user.getEmail(), roles, refresh));
+         //   var tokens = jwtService.issueTokenPair(user, Map.of("mfa", true));
+           // return ResponseEntity.ok(tokens);
         }
 
         // MFA required -> start challenge (this sends the email/SMS code!)
@@ -78,8 +87,13 @@ public class MfaController {
     @PostMapping("/mfa/verify")
     public ResponseEntity<?> verify(@RequestBody VerifyRequest req) {
         var user = mfaService.verifyLoginCode(req.challengeId(), req.code());
-        var tokens = jwtService.issueTokenPair(user, Map.of("mfa", true));
-        return ResponseEntity.ok(tokens);
+        var roles = user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
+        var extra = java.util.Map.<String, Object>of("mfa", true);
+        var access = jwtService.createToken(user.getId().toString(),user.getUsername(),user.getEmail(),roles,extra);
+        var refresh = jwtService.createRefreshToken(user);
+        //var tokens = jwtService.issueTokenPair(user, Map.of("mfa", true));
+        return ResponseEntity.ok(new TokenPairResponse(access, user.getUsername(), user.getEmail(), roles, refresh));
+        //return ResponseEntity.ok(tokens);
     }
 
     // ------------------ OPTIONAL: RESEND (throttled in service) ------------------
@@ -96,8 +110,8 @@ public class MfaController {
     }
 
     // ------------------ OPTIONAL: START MFA FOR ALREADY-AUTH'D SESSION (step-up) ------------------
-    @PostMapping("/mfa/start-session")
-    public ResponseEntity<?> startForCurrentSession() {
+    @PostMapping("/mfa/restart-session")
+    public ResponseEntity<?> startForPrevCurrentSession() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
 
         if (auth == null || !auth.isAuthenticated()) {
@@ -105,6 +119,33 @@ public class MfaController {
         }
         var principal = (org.springframework.security.core.userdetails.User) auth.getPrincipal();
         User user = userService.loadDomainUserByUsernameOrEmail(principal.getUsername());
+
+        var ch = mfaService.startLoginChallenge(user);
+        return ResponseEntity.accepted().body(new MfaStartResponse(
+                ch.getId(),
+                maskDestination(user),
+                mfaProps.loginTtlMinutes()
+        ));
+    }
+
+    @PostMapping("/mfa/start-session")
+    public ResponseEntity<?> startForCurrentSession() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) {
+            return ResponseEntity.status(401).build();
+        }
+
+        com.maxcogito.auth.domain.User user;
+        Object principal = auth.getPrincipal();
+
+        if (principal instanceof com.maxcogito.auth.security.UserDetailsImpl udi) {
+            // Best: load a fresh, managed entity by ID
+            user = userService.loadDomainUserById(udi.getId());
+        } else {
+            // Generic fallback (e.g., other auth types)
+            String username = auth.getName();
+            user = userService.loadDomainUserByUsernameOrEmail(username);
+        }
 
         var ch = mfaService.startLoginChallenge(user);
         return ResponseEntity.accepted().body(new MfaStartResponse(

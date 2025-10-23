@@ -162,6 +162,12 @@ public class JwtService {
                 .compact();
     }
 
+    public String createMfaAccessToken(User user, Set<String> roles, boolean mfa) {
+        var extra = java.util.Map.<String, Object>of("mfa", mfa);
+        return createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+    }
+
+
     public io.jsonwebtoken.Claims parseClaims(String token) {
         return Jwts.parserBuilder().setSigningKey(signingKey).build()
                 .parseClaimsJws(token).getBody();
