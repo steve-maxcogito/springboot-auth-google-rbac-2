@@ -74,12 +74,19 @@ public class MfaController {
         // MFA required -> start challenge (this sends the email/SMS code!)
         var challenge = mfaService.startLoginChallenge(user);
         log.info("REQUIRES MFA: Inside mfalogin - with challenge {}", challenge);
+        var now = java.time.Instant.now();
+        int cooldown = mfaProps.resendCooldownSeconds();
+        long resendAvailableAt = challenge.getCreatedAt().plusSeconds(cooldown).getEpochSecond();
+        long nowSec = now.getEpochSecond();
 
         // IMPORTANT: Do NOT include the OTP in the response. Just metadata.
         return ResponseEntity.accepted().body(new MfaStartResponse(
                 challenge.getId(),
                 maskDestination(user),
-                mfaProps.loginTtlMinutes()
+                mfaProps.loginTtlMinutes(),
+                nowSec,
+                cooldown,
+                resendAvailableAt
         ));
     }
 
@@ -102,10 +109,18 @@ public class MfaController {
         // Find the user tied to the existing challengeId
         var user = mfaService.userForChallenge(req.challengeId());
         var ch = mfaService.startLoginChallenge(user); // service reuses if within cooldown
+        var now = java.time.Instant.now();
+        int cooldown = mfaProps.resendCooldownSeconds();
+        long resendAvailableAt = ch.getCreatedAt().plusSeconds(cooldown).getEpochSecond();
+        long nowSec = now.getEpochSecond();
+
         return ResponseEntity.accepted().body(new MfaStartResponse(
                 ch.getId(),
                 maskDestination(user),
-                mfaProps.loginTtlMinutes()
+                mfaProps.loginTtlMinutes(),
+                nowSec,
+                cooldown,
+                resendAvailableAt
         ));
     }
 
@@ -121,10 +136,18 @@ public class MfaController {
         User user = userService.loadDomainUserByUsernameOrEmail(principal.getUsername());
 
         var ch = mfaService.startLoginChallenge(user);
+        var now = java.time.Instant.now();
+        int cooldown = mfaProps.resendCooldownSeconds();
+        long resendAvailableAt = ch.getCreatedAt().plusSeconds(cooldown).getEpochSecond();
+        long nowSec = now.getEpochSecond();
+
         return ResponseEntity.accepted().body(new MfaStartResponse(
                 ch.getId(),
                 maskDestination(user),
-                mfaProps.loginTtlMinutes()
+                mfaProps.loginTtlMinutes(),
+                nowSec,
+                cooldown,
+                resendAvailableAt
         ));
     }
 
@@ -148,10 +171,18 @@ public class MfaController {
         }
 
         var ch = mfaService.startLoginChallenge(user);
+        var now = java.time.Instant.now();
+        int cooldown = mfaProps.resendCooldownSeconds();
+        long resendAvailableAt = ch.getCreatedAt().plusSeconds(cooldown).getEpochSecond();
+        long nowSec = now.getEpochSecond();
+
         return ResponseEntity.accepted().body(new MfaStartResponse(
                 ch.getId(),
                 maskDestination(user),
-                mfaProps.loginTtlMinutes()
+                mfaProps.loginTtlMinutes(),
+                nowSec,
+                cooldown,
+                resendAvailableAt
         ));
     }
 
@@ -172,5 +203,14 @@ public class MfaController {
     public record LoginRequest(@NotBlank String username, @NotBlank String password) {}
     public record VerifyRequest(@NotBlank UUID challengeId, @NotBlank String code) {}
     public record ResendRequest(@NotBlank UUID challengeId) {}
-    public record MfaStartResponse(UUID challengeId, String destinationMasked, int ttlMinutes) {}
+   // public record MfaStartResponse(UUID challengeId, String destinationMasked, int ttlMinutes) {}
+    public record MfaStartResponse(
+            UUID challengeId,
+            String destinationMasked,
+            int ttlMinutes,
+            long serverNowEpochSec,
+            int resendCooldownSeconds,
+            long resendAvailableAtEpochSec
+    ) {}
+
 }
