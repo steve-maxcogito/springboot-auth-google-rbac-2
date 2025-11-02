@@ -1,10 +1,7 @@
 package com.maxcogito.auth.controller;
 import com.maxcogito.auth.domain.Role;
 import com.maxcogito.auth.domain.User;
-import com.maxcogito.auth.dto.AdminUpdateUserRequest;
-import com.maxcogito.auth.dto.RegisterRequest;
-import com.maxcogito.auth.dto.RoleUpdateRequest;
-import com.maxcogito.auth.dto.UserProfileResponse;
+import com.maxcogito.auth.dto.*;
 import com.maxcogito.auth.service.UserService;
 import com.maxcogito.auth.service.VerificationService;
 import jakarta.validation.Valid;
@@ -117,6 +114,14 @@ public class AdminUserController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping(path = "/{usernameOrEmail:.+}/email/status", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<EmailStatusResponse> getUserEmailVerifyStatus(@PathVariable String usernameOrEmail) {
+        return userService.findByUsernameOrEmail(usernameOrEmail)
+                .map(u -> ResponseEntity.ok(new EmailStatusResponse(u.getUsername(), u.getEmail(), u.isEmailVerified())))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).build());
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping(path = "/{username}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<UserProfileResponse> updateUserProfile(
             @PathVariable String username,
@@ -199,6 +204,5 @@ public class AdminUserController {
         if (!ALLOWED.contains(r)) throw new IllegalArgumentException("unknown role: " + r);
         return r;
     }
-
 
 }

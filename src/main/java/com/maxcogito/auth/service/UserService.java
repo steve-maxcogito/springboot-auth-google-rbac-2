@@ -69,7 +69,7 @@ public class UserService {
     // UserService.java
     @Transactional
     public Set<String> addRoleToUser(String username, String roleName) {
-        var user = userRepository.findByUsername(username)
+        var user = findByUsernameOrEmail(username)
                 .orElseThrow(() -> new UserNotFoundException(username));
 
         // normalize to ROLE_* and validate
@@ -112,6 +112,19 @@ public class UserService {
         user.getRoles().remove(role);
         Set<Role> roleSet = new HashSet<>();
         roleSet.add(role);
+        userRepository.save(user);
+        return roleSet;
+    }
+
+    @Transactional
+    public Set<Role> removeRoleFromUserReturnRoleSet(String username, String roleName) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + username));
+        Role role = roleRepository.findByName(roleName)
+                .orElseThrow(() -> new RoleNotFoundException("Role not found: " + roleName));
+        user.getRoles().remove(role);
+        Set<Role> roleSet = new HashSet<>();
+        roleSet = user.getRoles();
         userRepository.save(user);
         return roleSet;
     }
