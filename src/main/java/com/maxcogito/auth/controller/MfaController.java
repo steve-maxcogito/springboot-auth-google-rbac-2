@@ -73,7 +73,7 @@ public class MfaController {
 
         // MFA required -> start challenge (this sends the email/SMS code!)
         var challenge = mfaService.startLoginChallenge(user);
-        log.info("REQUIRES MFA: Inside mfalogin - with challenge {}", challenge);
+        log.info("REQUIRES MFA: Inside mfalogin - with challenge {}", challenge.toString());
         var now = java.time.Instant.now();
         int cooldown = mfaProps.resendCooldownSeconds();
         long resendAvailableAt = challenge.getCreatedAt().plusSeconds(cooldown).getEpochSecond();

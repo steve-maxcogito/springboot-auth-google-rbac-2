@@ -171,7 +171,7 @@ public class AuthController {
         var roles = user.getRoles().stream().map(Role::getName).collect(toSet());
         // ✅ Preserve/force MFA on refreshed access tokens
         boolean mfa = Boolean.TRUE.equals(claims.get("mfa")); // or just set to true if your policy requires it
-        var extra = java.util.Map.<String, Object>of("mfa", mfa);
+        var extra = java.util.Map.<String, Object>of("mfa", true);
 
         var newAccess  = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         var newRefresh = jwtService.createRefreshToken(user); // rotate

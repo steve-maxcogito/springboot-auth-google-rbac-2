@@ -32,6 +32,17 @@ public class UserService {
     }
 
     @Transactional
+    public void deleteByUsernameOrEmail(String s) {
+        User user = userRepository.findByUsername(s)
+                .or(() -> userRepository.findByEmail(s))
+                .orElseThrow(() -> new UserNotFoundException("User not found: " + s));
+
+        // IMPORTANT: Do not cascade REMOVE from User → Role on your @ManyToMany
+        // Deleting the user will clear join-table (user_roles) rows; Role rows remain.
+        userRepository.delete(user);
+    }
+
+    @Transactional
     public User save(User user) {
         return userRepository.save(user);
     };
