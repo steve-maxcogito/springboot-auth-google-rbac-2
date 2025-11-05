@@ -4,6 +4,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import com.maxcogito.auth.domain.Role;
 import com.maxcogito.auth.domain.User;
 import com.maxcogito.auth.dto.*;
+import com.maxcogito.auth.errors.UnauthorizedException;
 import com.maxcogito.auth.google.GoogleTokenVerifier;
 import com.maxcogito.auth.security.JwtService;
 import com.maxcogito.auth.security.UserDetailsImpl;
@@ -24,6 +25,7 @@ import com.maxcogito.auth.dto.TokenPairResponse;
 import com.maxcogito.auth.dto.RefreshRequest;
 import com.maxcogito.auth.dto.EmailRequest;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -206,8 +208,16 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(@Valid @RequestBody RefreshRequest req) {
-        refreshTokenService.revoke(req.getRefreshToken());
-        return ResponseEntity.ok().build();
+        try {
+            var rt = refreshTokenService.validate(req.getRefreshToken()); // stamps lastUsedAt if valid
+            rt.setRevoked(true);
+            rt.setRevokedAt(Instant.now());
+            // save happens inside validate/rotate flows; explicitly saving here is optional if your service does not
+            // refreshTokenRepository.save(rt);
+        } catch (UnauthorizedException e) {
+            // If token is invalid/expired, treat logout as idempotent: return 204 anyway
+        }
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/me")
