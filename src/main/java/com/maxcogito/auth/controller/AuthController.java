@@ -17,6 +17,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import com.maxcogito.auth.dto.TokenPairResponse;
@@ -160,23 +161,33 @@ public class AuthController {
     }
 
     @PostMapping("/token/refresh")
+    @Transactional
     public ResponseEntity<?> refreshToken(@Valid @RequestBody RefreshRequest req) {
-        var claims = jwtService.parseClaims(req.getRefreshToken());
+        String presented = req.getRefreshToken();
+
+        // 1) Parse claims (because your refresh token is a JWT that includes token_type + mfa)
+        var claims = jwtService.parseClaims(presented);
         if (!"refresh".equals(claims.get("token_type"))) {
-            return ResponseEntity.status(401).body(Map.of("error","invalid_refresh_token"));
+            return ResponseEntity.status(401).body(Map.of("error", "invalid_refresh_token"));
         }
         var userId = UUID.fromString(claims.getSubject());
+
+        // 2) Validate against DB row (by HASH) & stamp lastUsedAt
+        var rt = refreshTokenService.validate(presented); // throws if revoked/expired/not found
+
+        // 3) Load user, roles
         var user = userService.loadDomainUserById(userId);
+        var roles = user.getRoles().stream().map(Role::getName).collect(java.util.stream.Collectors.toSet());
 
-        var roles = user.getRoles().stream().map(Role::getName).collect(toSet());
-        // ✅ Preserve/force MFA on refreshed access tokens
-        boolean mfa = Boolean.TRUE.equals(claims.get("mfa")); // or just set to true if your policy requires it
-        var extra = java.util.Map.<String, Object>of("mfa", true);
+        // 4) Preserve/force MFA claim for access token
+        boolean mfa = Boolean.TRUE.equals(claims.get("mfa"));
+        var extra = java.util.Map.<String, Object>of("mfa", mfa);
 
-        var newAccess  = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
-        var newRefresh = jwtService.createRefreshToken(user); // rotate
+        // 5) Issue new access & ROTATE refresh (revoke old, create+save new)
+        String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles /*, extra if your API supports custom claims */);
+        String newRefreshRaw = refreshTokenService.rotate(rt); // returns NEW RAW, saved in DB internally
 
-        return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefresh));
+        return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefreshRaw));
     }
 
     @PostMapping("/verify/start")
