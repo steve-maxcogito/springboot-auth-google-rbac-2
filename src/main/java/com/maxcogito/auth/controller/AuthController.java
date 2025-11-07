@@ -165,32 +165,20 @@ public class AuthController {
     @PostMapping("/token/refresh")
     @Transactional
     public ResponseEntity<?> refreshToken(@Valid @RequestBody RefreshRequest req) {
-        String presented = req.getRefreshToken();
+        final String presented = req.getRefreshToken();
 
-        // 1) Parse claims (because your refresh token is a JWT that includes token_type + mfa)
-        var claims = jwtService.parseClaims(presented);
-        if (!"refresh".equals(claims.get("token_type"))) {
-            return ResponseEntity.status(401).body(Map.of("error", "invalid_refresh_token"));
-        }
-        var userId = UUID.fromString(claims.getSubject());
+        // Validate by DB (hash lookup), stamp last_used_at
+        var oldRt = refreshTokenService.validate(presented); // throws 401 if bad
 
-        // 2) Validate against DB row (by HASH) & stamp lastUsedAt
-        var rt = refreshTokenService.validate(presented); // throws if revoked/expired/not found
+        var user  = oldRt.getUser();
+        var roles = user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
 
-        // 3) Load user, roles
-        var user = userService.loadDomainUserById(userId);
-        var roles = user.getRoles().stream().map(Role::getName).collect(java.util.stream.Collectors.toSet());
+        String newAccess  = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        String newRefresh = refreshTokenService.rotate(oldRt); // revoke old + create new
 
-        // 4) Preserve/force MFA claim for access token
-        boolean mfa = Boolean.TRUE.equals(claims.get("mfa"));
-        var extra = java.util.Map.<String, Object>of("mfa", mfa);
-
-        // 5) Issue new access & ROTATE refresh (revoke old, create+save new)
-        String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles /*, extra if your API supports custom claims */);
-        String newRefreshRaw = refreshTokenService.rotate(rt); // returns NEW RAW, saved in DB internally
-
-        return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefreshRaw));
+        return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefresh));
     }
+
 
     @PostMapping("/verify/start")
     public ResponseEntity<?> startVerify(@Valid @RequestBody EmailRequest req) {
