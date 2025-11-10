@@ -6,6 +6,7 @@ import com.maxcogito.auth.domain.MfaMethod;
 import com.maxcogito.auth.domain.User;
 import com.maxcogito.auth.repo.MfaChallengeRepository;
 import com.maxcogito.auth.service.EmailService;
+import com.maxcogito.auth.service.UserService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class MfaService {
     private final PasswordEncoder encoder;
     private final EmailService mail;
     private final SmsService sms;
+    private final UserService userService;
     private final Clock clock;
     private final MfaProperties props;
 
@@ -34,6 +36,7 @@ public class MfaService {
                       PasswordEncoder encoder,
                       EmailService mail,
                       SmsService sms,
+                      UserService userService,
                       Clock clock,
                       MfaProperties props) {
         this.repo = repo;
@@ -41,6 +44,7 @@ public class MfaService {
         this.encoder = encoder;
         this.mail = mail;
         this.sms = sms;
+        this.userService = userService;
         this.clock = clock;
         this.props = props;
     }
@@ -73,17 +77,23 @@ public class MfaService {
         }
 
         switch (method) {
-            case EMAIL_OTP -> mail.send(
-                    user.getEmail(),
-                    "Your login code",
-                    "Your verification code is: " + code + " (valid " + ttlMinutes + " minutes)"
-            );
+            case EMAIL_OTP -> {
+                mail.send(
+                        user.getEmail(),
+                        "Your login code",
+                        "Your verification code is: " + code + " (valid " + ttlMinutes + " minutes)"
+                );
+                user.setMfaMethod(method);
+                userService.save(user);
+            }
             case SMS_OTP -> {
                 var phone = user.getPhoneNumber();
                 if (phone == null || phone.isBlank()) {
                     throw new IllegalArgumentException("User has no phone number on file");
                 }
                 sms.send(phone, "Your code: " + code + " (valid " + ttlMinutes + "m)");
+                user.setMfaMethod(method);
+                userService.save(user);
             }
             default -> throw new IllegalStateException("Unsupported MFA method: " + method);
         }
