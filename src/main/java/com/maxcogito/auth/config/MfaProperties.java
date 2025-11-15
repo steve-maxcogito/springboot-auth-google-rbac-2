@@ -8,5 +8,6 @@ public record MfaProperties(boolean required,          // app.mfa.required=true/
                             int resendCooldownSeconds, // app.mfa.resend.cooldownSeconds
                             int onboardingTtlMinutes,
                             int maxAttempts,
+                            int stepUpMaxAgeSeconds,
                             String method)  // app.mfa.method=[email,sms]
  {}

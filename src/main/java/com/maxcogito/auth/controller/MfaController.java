@@ -65,6 +65,7 @@ public class MfaController {
 
         // Decide MFA requirement (you can also OR with user.getMfaRequired())
         boolean requiresMfa = mfaProps.required();
+        user.setMfaEnabled(requiresMfa);
 
         if (!requiresMfa) {
             // MFA not required -> issue full tokens immediately
@@ -74,7 +75,8 @@ public class MfaController {
 
             // IMPORTANT: persist refresh token row; return RAW to client
             String refresh = refreshTokenService.createToken(user);
-
+            user.setLastLoginAt(Instant.now());
+            userService.save(user);
             return ResponseEntity.ok(new TokenPairResponse(access, user.getUsername(), user.getEmail(), roles, refresh));
         }
 
@@ -110,6 +112,7 @@ public class MfaController {
         String refresh = refreshTokenService.createToken(user);
         Instant timeNow = Instant.now();
         user.setMfaEnforcedAt(timeNow);
+        user.setLastLoginAt(timeNow);
         userService.save(user);
 
         return ResponseEntity.ok(new TokenPairResponse(access, user.getUsername(), user.getEmail(), roles, refresh));

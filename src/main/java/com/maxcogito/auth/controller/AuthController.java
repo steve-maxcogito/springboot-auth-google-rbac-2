@@ -157,7 +157,29 @@ public class AuthController {
         var old = refreshTokenService.validate(req.getRefreshToken());
         var user = old.getUser();
         var roles = user.getRoles().stream().map(r -> r.getName()).collect(toSet());
-        String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        // Access token with mfa=true claim (if you rely on it in downstream services)
+
+        // After you load the user and roles
+        boolean recentlyMfa = false;
+        Instant enforcedAt = user.getMfaEnforcedAt();
+        if (enforcedAt != null) {
+            long ageSec = java.time.Duration.between(enforcedAt, Instant.now()).getSeconds();
+            recentlyMfa = ageSec <= mfaProperties.stepUpMaxAgeSeconds(); // e.g., 1800 (30m)
+        }
+
+        Map<String, Object> extra = new java.util.HashMap<>();
+        if (recentlyMfa) {
+            extra.put("mfa", true);
+            extra.put("auth_time", enforcedAt.getEpochSecond());
+        }
+
+// overload your JwtService.createToken to accept "extra" map
+        String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+
+        //***********************************************************
+       // var extra = java.util.Map.<String, Object>of("mfa", true);
+       // String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+        //String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String newRefresh = refreshTokenService.createToken(user);
         return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefresh));
     }
@@ -173,7 +195,23 @@ public class AuthController {
         var user  = oldRt.getUser();
         var roles = user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
 
-        String newAccess  = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        // After you load the user and roles
+        boolean recentlyMfa = false;
+        Instant enforcedAt = user.getMfaEnforcedAt();
+        if (enforcedAt != null) {
+            long ageSec = java.time.Duration.between(enforcedAt, Instant.now()).getSeconds();
+            recentlyMfa = ageSec <= mfaProperties.stepUpMaxAgeSeconds(); // e.g., 1800 (30m)
+        }
+
+        Map<String, Object> extra = new java.util.HashMap<>();
+        if (recentlyMfa) {
+            extra.put("mfa", true);
+            extra.put("auth_time", enforcedAt.getEpochSecond());
+        }
+       // var extra = java.util.Map.<String, Object>of("mfa", true);
+        String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+
+        //String newAccess  = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String newRefresh = refreshTokenService.rotate(oldRt); // revoke old + create new
 
         return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefresh));
@@ -210,6 +248,37 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<?> me() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated()) return ResponseEntity.status(401).build();
+
+        var principal = (UserDetailsImpl) userDetailsService.loadUserByUsername(auth.getName());
+        var user = principal.getDomainUser();
+        var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(toSet());
+
+        var now = java.time.Instant.now();
+        long ageSec;
+        var enforcedAt = user.getMfaEnforcedAt();
+        if (enforcedAt != null) {
+            ageSec = java.time.Duration.between(enforcedAt, now).getSeconds();
+            if (ageSec < 0) ageSec = 0;
+        } else {
+            ageSec = Long.MAX_VALUE; // never MFA’d
+        }
+        boolean fresh = ageSec <= mfaProperties.stepUpMaxAgeSeconds();
+
+        var out = new SessionMeResponse();
+        out.setId(user.getId() != null ? user.getId().toString() : null);
+        out.setUsername(user.getUsername());
+        out.setEmail(user.getEmail());
+        out.setRoles(roles);
+        out.setMfa(fresh);
+        out.setMfaAgeSec(ageSec);
+        out.setNowEpochSec(now.getEpochSecond());
+        return ResponseEntity.ok(out);
+    }
+
+    @GetMapping("/me2")
+    public ResponseEntity<?> me2() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated()) return ResponseEntity.status(401).build();
         var principal = (UserDetailsImpl) userDetailsService.loadUserByUsername(auth.getName());

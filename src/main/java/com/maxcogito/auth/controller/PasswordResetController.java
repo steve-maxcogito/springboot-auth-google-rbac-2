@@ -27,6 +27,14 @@ public class PasswordResetController {
         return ResponseEntity.accepted().build(); // 202 Accepted
     }
 
+    // Step 1: start reset → sends email code
+    @PostMapping("/forgot/sendlink")
+    public ResponseEntity<Void> forgotSendLink(@Valid @RequestBody PasswordResetStartRequest req) {
+        service.startLinkReset(req.email());
+        //service.startLinkVerify(req.email());
+        return ResponseEntity.accepted().build(); // 202 Accepted
+    }
+
     // Step 2: confirm with code + set new password
     @PostMapping("/reset")
     public ResponseEntity<Void> reset(@Valid @RequestBody PasswordResetConfirmRequest req) {

@@ -39,6 +39,9 @@ public class User {
     private String postalCode;
     private String country;
 
+    @Column(name = "last_login_at")
+    private Instant lastLoginAt;
+
     @Email
     @Column(nullable = false, unique = true)
     private String email;
@@ -182,5 +185,13 @@ public class User {
 
     public void setMfaEnforcedAt(Instant mfaEnforcedAt) {
         this.mfaEnforcedAt = mfaEnforcedAt;
+    }
+
+    public Instant getLastLoginAt() {
+        return lastLoginAt;
+    }
+
+    public void setLastLoginAt(Instant lastLoginAt) {
+        this.lastLoginAt = lastLoginAt;
     }
 }

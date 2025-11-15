@@ -83,6 +83,39 @@ public class PasswordResetService {
     }
 
     @Transactional
+    public void startLinkReset(String email) {
+        //   var user = userRepo.findByEmail(email).orElseThrow(() -> new IllegalArgumentException("No user with that email"));
+
+        var user = userService.findByUsernameOrEmail(email);
+        // Invalidate older tokens
+        tokenRepo.deleteByUserId(user.get().getId());
+
+        Logger log = LoggerFactory.getLogger(PasswordResetService.class);
+
+        log.info("Starting password reset email link process for user {}", user);
+
+        //String token = UUID.randomUUID().toString().replace("-", "");
+        var prt = new PasswordResetToken();
+        //String hash = sha256(token);
+        String code = otpGenerator.generate6();
+        String hash = sha256(code);
+        prt.setToken(hash);
+        //prt.setToken(code);
+        prt.setUser(user.get());
+        prt.setExpiresAt(Instant.now().plus(TTL));
+        tokenRepo.save(prt);
+
+        String subject = "Reset your password";
+
+        String link = frontendBaseUrl + "/reset-from-link?token=" + code;
+        String body = "Hello " + (user.get().getFirstName()!=null?user.get().getFirstName():"") + ",\n\n"
+                + "Please reset your password by clicking the link: " + link + "\n\n"
+                + "This link expires in " + TTL.toMinutes() + " minutes.";
+
+        mailer.sendHtml(user.get().getEmail(), subject, body);
+    }
+
+    @Transactional
     public void confirm(String token, String newPassword) {
 
         String normalized = token.trim();

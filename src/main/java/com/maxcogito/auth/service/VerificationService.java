@@ -7,6 +7,8 @@ import com.maxcogito.auth.errors.TokenAlreadyUsedException;
 import com.maxcogito.auth.errors.TokenExpiredException;
 import com.maxcogito.auth.repo.UserRepository;
 import com.maxcogito.auth.repo.VerificationTokenRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,7 @@ import java.util.UUID;
 @Service
 public class VerificationService {
 
+    private static final Logger log = LoggerFactory.getLogger(VerificationService.class);
     private final VerificationTokenRepository repo;
     private final UserRepository userRepo;
     private final EmailService emailService;
@@ -121,6 +124,8 @@ public class VerificationService {
         }
         user.setMfaEnrolled(true);
         userRepo.save(user);
+        log.info("MFA enabled: "+user.getMfaEnrolled());
+        log.info("Email is verified status: "+user.isEmailVerified());
         repo.save(vt);
         // (Optional) You could track a 'verified' flag on User; add field if desired.
         // For simplicity, we don't block login on unverified status in this sample.
