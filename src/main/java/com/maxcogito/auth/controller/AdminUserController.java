@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/v1/admin/users")
+@RequestMapping("/api/v1/admin")
 public class AdminUserController {
     private static final Logger log = LoggerFactory.getLogger(AdminUserController.class);
     private final UserService userService;
@@ -32,7 +32,7 @@ public class AdminUserController {
 
     // Replace the entire role set for a user
     @PreAuthorize("hasRole('ADMIN')")
-    @PostMapping("/{username}/replace/roles")
+    @PostMapping("/users/{username}/replace/roles")
     public ResponseEntity<Void> setNewRoles(@PathVariable String username,
                                          @Valid @RequestBody RoleUpdateRequest req) {
         userService.setRolesForUser(username, req.roles());
@@ -41,7 +41,7 @@ public class AdminUserController {
 
     // Replace entire role set (idempotent)
     @PreAuthorize("hasRole('ADMIN')")
-    @PutMapping("/{usernameOrEmail:.+}/roles")
+    @PutMapping("/users/{usernameOrEmail:.+}/roles")
     public ResponseEntity<Set<String>> setRoles(@PathVariable String username,
                                                 @Valid @RequestBody RoleUpdateRequest req) {
         Set<String> normalized = req.roles().stream()
@@ -52,7 +52,7 @@ public class AdminUserController {
     }
     
     @PreAuthorize("hasRole('ADMIN')")
-    @PostMapping("/{usernameOrEmail:.+}/verification/send-email")
+    @PostMapping("/users/{usernameOrEmail:.+}/verification/send-email")
     public ResponseEntity<Void> sendVerificationEmail(
             @PathVariable("usernameOrEmail") String usernameOrEmail) {
 
@@ -70,7 +70,7 @@ public class AdminUserController {
 
     // .+ to allow dots in emails/usernames
     @PreAuthorize("hasRole('ADMIN')")
-    @DeleteMapping("/{usernameOrEmail:.+}")
+    @DeleteMapping("/users/{usernameOrEmail:.+}")
     public ResponseEntity<Void> deleteUser(@PathVariable String usernameOrEmail) {
         userService.deleteByUsernameOrEmail(usernameOrEmail);
         return ResponseEntity.noContent().build(); // 204 on success
@@ -79,7 +79,7 @@ public class AdminUserController {
     // Add one role
 
     @PreAuthorize("hasRole('ADMIN')")
-    @PostMapping("/{username}/roles/add")
+    @PostMapping("/users/{username}/roles/add")
     public ResponseEntity<Set<String>> addRole(@PathVariable String username,
                                                @RequestParam("role") String role) {
         log.info("Received add role request: {}", role);
@@ -89,7 +89,7 @@ public class AdminUserController {
 
     // Remove one role
     @PreAuthorize("hasRole('ADMIN')")
-    @PostMapping("/{username}/roles/remove")
+    @PostMapping("/users/{username}/roles/remove")
     public ResponseEntity<Void> removeRole(@PathVariable String username,
                                            @RequestParam("role") String role) {
         userService.removeRoleFromUser(username, role);
@@ -98,7 +98,7 @@ public class AdminUserController {
 
     // Remove one role
     @PreAuthorize("hasRole('ADMIN')")
-    @DeleteMapping("/{username}/roles/{role}")
+    @DeleteMapping("/users/{username}/roles/{role}")
     public ResponseEntity<Set<String>> removeUserRole(@PathVariable String username,
                                                   @PathVariable String role) {
         Set<Role> updated = userService.removeRoleSetFromUser(username, normalizeRole(role));
@@ -106,7 +106,7 @@ public class AdminUserController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @GetMapping(path= "/user/{username}",produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(path= "/users/user/{username}",produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<User> getUser(@PathVariable String username) {
         log.debug("REST request to get single User");
         Optional<User> user = userService.findByUsernameOrEmail(username);
@@ -114,7 +114,7 @@ public class AdminUserController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @GetMapping(path = "/{usernameOrEmail:.+}/email/status", produces = MediaType.APPLICATION_JSON_VALUE)
+    @GetMapping(path = "/users/{usernameOrEmail:.+}/email/status", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<EmailStatusResponse> getUserEmailVerifyStatus(@PathVariable String usernameOrEmail) {
         return userService.findByUsernameOrEmail(usernameOrEmail)
                 .map(u -> ResponseEntity.ok(new EmailStatusResponse(u.getUsername(), u.getEmail(), u.isEmailVerified())))
@@ -122,7 +122,7 @@ public class AdminUserController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @PutMapping(path = "/{username}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @PutMapping(path = "/users/{username}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<UserProfileResponse> updateUserProfile(
             @PathVariable String username,
             @Valid @RequestBody AdminUpdateUserRequest req) {

@@ -9,18 +9,20 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
 
 @RestController
+@RequestMapping("/api/v1/auth")
 public class VerificationController {
     private static final Logger log = LoggerFactory.getLogger(VerificationController.class);
     @Value("${app.frontendBaseUrl}")
     private String frontend; // e.g., http://localhost:5173 or https://app.maxcogito.com
 
-    @GetMapping("/api/v1/auth/verify/confirmCode")
+    @GetMapping("/verify/confirmCode")
     public ResponseEntity<Void> confirmVerifyCode(@RequestParam("token") String token) {
         try {
             // use your method name: confirm(...) or confirmCode(...)
@@ -35,7 +37,7 @@ public class VerificationController {
         }
     }
 
-    @GetMapping("/api/v1/auth/verify/confirmLink")
+    @GetMapping("/verify/confirmLink")
     public ResponseEntity<Void> confirmVerifyLinkCode(@RequestParam("token") String token) {
         try {
             // use your method name: confirm(...) or confirmCode(...)

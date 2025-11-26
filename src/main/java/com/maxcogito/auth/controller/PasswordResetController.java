@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/auth/password")
+@RequestMapping("/api/v1/auth")
 public class PasswordResetController {
     private final PasswordResetService service;
 
@@ -20,7 +20,7 @@ public class PasswordResetController {
     }
 
     // Step 1: start reset → sends email code
-    @PostMapping("/forgot")
+    @PostMapping("/password/forgot")
     public ResponseEntity<Void> forgot(@Valid @RequestBody PasswordResetStartRequest req) {
         service.start(req.email());
         //service.startLinkVerify(req.email());
@@ -28,7 +28,7 @@ public class PasswordResetController {
     }
 
     // Step 1: start reset → sends email code
-    @PostMapping("/forgot/sendlink")
+    @PostMapping("/password/forgot/sendlink")
     public ResponseEntity<Void> forgotSendLink(@Valid @RequestBody PasswordResetStartRequest req) {
         service.startLinkReset(req.email());
         //service.startLinkVerify(req.email());
@@ -36,7 +36,7 @@ public class PasswordResetController {
     }
 
     // Step 2: confirm with code + set new password
-    @PostMapping("/reset")
+    @PostMapping("/password/reset")
     public ResponseEntity<Void> reset(@Valid @RequestBody PasswordResetConfirmRequest req) {
         service.confirm(req.token(), req.newPassword());
         return ResponseEntity.noContent().build(); // 204

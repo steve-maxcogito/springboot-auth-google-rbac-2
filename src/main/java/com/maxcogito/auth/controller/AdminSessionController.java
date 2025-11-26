@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/admin/sessions")
+@RequestMapping("/api/v1/admin")
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminSessionController {
 
@@ -27,13 +27,13 @@ public class AdminSessionController {
         this.adminSessionService = adminSessionService;
     }
 
-    @GetMapping("/active/count")
+    @GetMapping("/sessions/active/count")
     public ResponseEntity<Map<String, Long>> getActiveUserCount() {
         long count = refreshTokenRepository.countActiveUsers(Instant.now());
         return ResponseEntity.ok(Map.of("totalActiveUsers", count));
     }
 
-    @GetMapping("/active/users")
+    @GetMapping("/sessions/active/users")
     public ResponseEntity<List<ActiveUserSessionDto>> getActiveUsers() {
         List<ActiveUserSessionDto> sessions =
                 adminSessionService.getActiveUserSessions();
