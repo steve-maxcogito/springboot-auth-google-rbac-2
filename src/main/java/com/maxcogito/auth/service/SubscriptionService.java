@@ -7,6 +7,8 @@ import com.maxcogito.auth.mapper.SubscriptionMapper;
 import com.maxcogito.auth.repo.RoleRepository;
 import com.maxcogito.auth.repo.UserRepository;
 import com.maxcogito.auth.repo.UserSubscriptionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,6 +22,7 @@ import java.util.stream.Collectors;
 @Transactional
 public class SubscriptionService {
 
+    private static final Logger log = LoggerFactory.getLogger(SubscriptionService.class);
     private final UserRepository userRepository;
     private final UserSubscriptionRepository subscriptionRepository;
     private final RoleRepository roleRepository;
@@ -196,7 +199,8 @@ public class SubscriptionService {
     protected void grantRoleForService(User user, SubscriptionServiceKind kind) {
 
         String roleName;
-
+        log.info("Granting role for user: " + user.getUsername());
+        log.info("roleName for user is:"+kind.toString());
         switch (kind) {
             case IDENTITY_SERVICE:
                 roleName = "ROLE_IDENTITY_SERVICE";

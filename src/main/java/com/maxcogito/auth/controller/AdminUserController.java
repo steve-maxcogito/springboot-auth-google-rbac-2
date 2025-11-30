@@ -194,7 +194,7 @@ public class AdminUserController {
     }
 
     private static final Set<String> ALLOWED = Set.of(
-            "ROLE_USER", "ROLE_ADMIN", "ROLE_DATA_SERVICE", "ROLE_SECURITY_SERVICE"
+            "ROLE_USER", "ROLE_ADMIN", "ROLE_DATA_SERVICE", "ROLE_DATA_ANALYTIC_SERVICE","ROLE_SECURITY_SERVICE","ROLE_IDENTITY_SERVICE","ROLE_COMMODITY_ANALYTIC_SERVICE"
     );
 
     private String normalizeRole(String role) {

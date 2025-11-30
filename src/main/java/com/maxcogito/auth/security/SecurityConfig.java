@@ -28,18 +28,29 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
-            .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers(
-                        "/api/v1/auth/**",
-                        "/actuator/health",
-                        "/api/v1/test/**",
-                        "/api/v1/dev/**")
-                    .permitAll().requestMatchers("/api/v1/admin/**").hasRole("ADMIN")   // <-- defense-in-depth
-                .anyRequest().authenticated()
-            )
-            .authenticationProvider(daoAuthenticationProvider())
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        // Public / anonymous endpoints
+                        .requestMatchers(
+                                "/api/v1/auth/**",
+                                "/actuator/health",
+                                "/api/v1/test/**",
+                                "/api/v1/dev/**",
+                               // "/api/v1/payments/**",
+                                // Webhook from mock-payment-gateway should NOT require JWT
+                                "/api/v1/payments/webhook/**")
+                        .permitAll()
+
+                        // Admin endpoints: must have ROLE_ADMIN or ROLE_SECURITY_SERVICE
+                        .requestMatchers("/api/v1/admin/**")
+                        .hasAnyRole("ADMIN", "SECURITY_SERVICE")
+
+                        // Everything else: must be authenticated (JWT)
+                        .anyRequest().authenticated()
+                )
+                .authenticationProvider(daoAuthenticationProvider())
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
     }
 
@@ -61,3 +72,4 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 }
+
