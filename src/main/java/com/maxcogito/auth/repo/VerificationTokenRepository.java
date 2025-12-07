@@ -16,6 +16,10 @@ public interface VerificationTokenRepository extends JpaRepository<VerificationT
     void deleteByToken(String token);
     void deleteByUserId(UUID userId);
 
+    Optional<VerificationToken> findByTokenAndUserId(String token, UUID userId);
+
+    Optional<VerificationToken> findAllByUserId(UUID userId);
+
     @Modifying
     @Query("delete from VerificationToken v " +
             "where v.used = true or v.expiresAt < :now")

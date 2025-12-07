@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -25,21 +26,26 @@ public class RefreshTokenService {
     private final SecureRandom sr = new SecureRandom();
     private final UserRepository userRepo;
     private final Duration refreshTtl = Duration.ofDays(30);
+    private final int maxActiveTokens;
     public RefreshTokenService(RefreshTokenRepository repo,
                                UserRepository userRepo,
                                @Value("${app.refresh.tokenTtlDays:14}") long ttlDays,
-                               @Value("${app.refresh.rotateOnUse:true}") boolean rotateOnUse) {
+                               @Value("${app.refresh.rotateOnUse:true}") boolean rotateOnUse,
+                               @Value("${app.jwt.max-active-tokens}") int maxActiveTokens)
+    {
         this.repo = repo;
         this.userRepo = userRepo;
         this.ttlDays = ttlDays;
         this.rotateOnUse = rotateOnUse;
+        this.maxActiveTokens = maxActiveTokens;
     }
 
 
     @Transactional
     public String createToken(User user) {
         String raw = randomOpaque();                // return this to client
-        String hash = hashToken(raw);               // store this in DB
+        String hash = hashToken(raw);
+        Instant now = Instant.now();// store this in DB
 
         RefreshToken rt = new RefreshToken();
         rt.setUser(user);
@@ -48,6 +54,8 @@ public class RefreshTokenService {
         rt.setRevoked(false);
         // createdAt set by @PrePersist in entity
         repo.save(rt);
+
+        enforcePerUserLimit(user.getId(),now);
 
         return raw;
     }
@@ -97,6 +105,27 @@ public class RefreshTokenService {
     }
 
     // -------- helpers --------
+    /**
+     * Ensure that the user has at most maxActiveTokens active refresh tokens.
+     * "Oldest" means least recently used: coalesce(lastUsedAt, createdAt) ascending.
+     */
+    @Transactional
+    protected void enforcePerUserLimit(UUID userId, Instant now) {
+        List<RefreshToken> active = repo.findActiveForUserOrderByRecent(userId, now);
+        if (active.size() <= maxActiveTokens) {
+            return;
+        }
+
+        // active is newest → oldest; keep the first maxActiveTokens, revoke the rest
+        for (int i = maxActiveTokens; i < active.size(); i++) {
+            RefreshToken rt = active.get(i);
+            rt.setRevoked(true);
+            rt.setRevokedAt(now);
+        }
+
+        // Persist only the ones we changed
+        repo.saveAll(active.subList(maxActiveTokens, active.size()));
+    }
 
     private static String randomOpaque() {
         // 32 bytes → Base64URL without padding (~43 chars). You can also use Hex.

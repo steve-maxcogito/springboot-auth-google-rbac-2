@@ -49,5 +49,19 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
         order by max(coalesce(rt.lastUsedAt, rt.createdAt)) desc
     """)
     List<Object[]> findActiveUserSessionsRaw(@Param("now") Instant now);
+
+    // NEW: all active tokens for a user, newest first
+    @Query("""
+        select rt
+        from RefreshToken rt
+        where rt.user.id = :userId
+          and rt.revoked = false
+          and rt.expiresAt > :now
+        order by coalesce(rt.lastUsedAt, rt.createdAt) desc, rt.id desc
+    """)
+    List<RefreshToken> findActiveForUserOrderByRecent(
+            @Param("userId") UUID userId,
+            @Param("now") Instant now
+    );
 }
 

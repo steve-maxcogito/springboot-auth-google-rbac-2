@@ -29,19 +29,22 @@ public class JwtService {
     // Add these (read from application.properties you already have)
     private final long refreshTtlDays;
     private final boolean refreshRotateOnUse;
+    private final int maxActiveTokens;
 
     public JwtService(
             @Value("${app.jwt.secret}") String secretBase64,
             @Value("${app.jwt.issuer}") String issuer,
             @Value("${app.jwt.expirationMinutes}") long expirationMinutes,
             @Value("${app.refresh.tokenTtlDays}") long refreshTtlDays,
-            @Value("${app.refresh.rotateOnUse:true}") boolean refreshRotateOnUse
+            @Value("${app.refresh.rotateOnUse:true}") boolean refreshRotateOnUse,
+            @Value("${app.jwt.max-active-tokens}") int maxActiveTokens
     ) {
         this.signingKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(secretBase64));
         this.issuer = issuer;
         this.expirationMinutes = expirationMinutes;
         this.refreshTtlDays = refreshTtlDays;
         this.refreshRotateOnUse = refreshRotateOnUse;
+        this.maxActiveTokens = maxActiveTokens;
     }
 
     // ---------- existing createToken overloads stay unchanged ----------
