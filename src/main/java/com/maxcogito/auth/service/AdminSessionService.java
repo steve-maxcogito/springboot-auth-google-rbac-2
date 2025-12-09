@@ -6,6 +6,7 @@ import com.maxcogito.auth.dto.ActiveUserSessionDto;
 import com.maxcogito.auth.repo.RefreshTokenRepository;
 import com.maxcogito.auth.repo.UserRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -62,4 +63,22 @@ public class AdminSessionService {
 
         return result;
     }
+
+    /** Deletes all revoked OR expired refresh tokens; returns number of rows deleted. */
+    @Transactional
+    public int purgeRevokedOrExpiredTokens() {
+        Instant now = Instant.now();
+        return refreshTokenRepository.deleteRevokedOrExpired(now);
+    }
+
+    /**
+     * Revokes all active refresh tokens for a given user (logout everywhere).
+     * Returns the number of tokens that were marked revoked.
+     */
+    @Transactional
+    public int revokeAllTokensForUser(UUID userId) {
+        return refreshTokenRepository.revokeAllForUser(userId, Instant.now());
+    }
+
+
 }

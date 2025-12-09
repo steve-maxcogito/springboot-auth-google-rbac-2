@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/admin")
@@ -38,5 +39,28 @@ public class AdminSessionController {
         List<ActiveUserSessionDto> sessions =
                 adminSessionService.getActiveUserSessions();
         return ResponseEntity.ok(sessions);
+    }
+
+    // 🔹 NEW: logout this user everywhere (revoke all active refresh tokens)
+    @PostMapping("/sessions/{userId}/revoke-all")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Integer>> revokeAllTokensForUser(@PathVariable UUID userId) {
+        int revoked = adminSessionService.revokeAllTokensForUser(userId);
+        return ResponseEntity.ok(Map.of("revoked", revoked));
+    }
+
+    @DeleteMapping("/sessions/revoked")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Integer>> deleteRevokedUserTokens() {
+        int deleted = adminSessionService.purgeRevokedOrExpiredTokens();
+        return ResponseEntity.ok(Map.of("deleted", deleted));
+    }
+
+    @DeleteMapping("/sessions/revoked/tokenById")
+    public ResponseEntity<Void> revokeUserTokenById(@RequestParam("id") UUID id) {
+        Instant now = Instant.now();
+        refreshTokenRepository.revokeAllForUser(id, now);
+        refreshTokenRepository.deleteRevokedOrExpired(now);
+        return ResponseEntity.ok().build();
     }
 }
