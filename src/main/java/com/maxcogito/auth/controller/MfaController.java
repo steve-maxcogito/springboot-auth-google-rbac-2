@@ -71,7 +71,7 @@ public class MfaController {
             // MFA not required -> issue full tokens immediately
             var roles = user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
             var extra = java.util.Map.<String, Object>of("mfa", true); // access token carries mfa=true
-            String access  = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+            String access  = jwtService.createToken(user.getId(),user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
 
             // IMPORTANT: persist refresh token row; return RAW to client
             String refresh = refreshTokenService.createToken(user);
@@ -106,7 +106,7 @@ public class MfaController {
 
         // Access token with mfa=true claim (if you rely on it in downstream services)
         var extra = java.util.Map.<String, Object>of("mfa", true);
-        String access = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+        String access = jwtService.createToken(user.getId(),user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
 
         // IMPORTANT: persist refresh token row; return RAW to client
         String refresh = refreshTokenService.createToken(user);

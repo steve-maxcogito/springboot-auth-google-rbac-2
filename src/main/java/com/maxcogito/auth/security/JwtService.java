@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
@@ -48,12 +49,12 @@ public class JwtService {
     }
 
     // ---------- existing createToken overloads stay unchanged ----------
-    public String createToken(String subject, String username, String email,
+    public String createToken(UUID userId,String subject, String username, String email,
                               Set<String> roles) {
-        return createToken(subject, username, email, roles, Map.of());
+        return createToken(userId,subject, username, email, roles, Map.of());
     }
 
-    public String createToken(String subject, String username, String email,
+    public String createTokenOld(String subject, String username, String email,
                               Set<String> roles,
                               Map<String, Object> extraClaims) {
         Instant now = Instant.now();
@@ -75,10 +76,39 @@ public class JwtService {
         return builder.signWith(signingKey, SignatureAlgorithm.HS256).compact();
     }
 
+    public String createToken(UUID userId,
+                              String subject,
+                              String username,
+                              String email,
+                              Set<String> roles,
+                              Map<String, Object> extraClaims) {
+
+        Instant now = Instant.now();
+        Instant exp = now.plusSeconds(expirationMinutes * 60);
+
+        JwtBuilder builder = Jwts.builder()
+                .setIssuer(issuer)
+                .setSubject(subject)
+                .claim("uid", userId.toString())        // <-- NEW!
+                .claim("username", username)
+                .claim("email", email)
+                .claim("roles", roles)
+                .setIssuedAt(Date.from(now))
+                .setExpiration(Date.from(exp));
+
+        if (extraClaims != null && !extraClaims.isEmpty()) {
+            extraClaims.forEach(builder::claim);
+        }
+
+        return builder.signWith(signingKey, SignatureAlgorithm.HS256).compact();
+    }
+
+
     // ---------- new helpers that build on your existing methods ----------
 
     public String createAccessToken(User user, Map<String, Object> extraClaims) {
         return createToken(
+                user.getId(),
                 user.getId().toString(),
                 user.getUsername(),
                 user.getEmail(),
@@ -94,6 +124,7 @@ public class JwtService {
         return Jwts.builder()
                 .setIssuer(issuer)
                 .setSubject(user.getId().toString())
+                .claim("uid", user.getId().toString())
                 .claim("username", user.getUsername())
                 .claim("token_type", "refresh")
                 .setIssuedAt(Date.from(now))
@@ -167,7 +198,7 @@ public class JwtService {
 
     public String createMfaAccessToken(User user, Set<String> roles, boolean mfa) {
         var extra = java.util.Map.<String, Object>of("mfa", mfa);
-        return createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+        return createToken(user.getId(),user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
     }
 
 

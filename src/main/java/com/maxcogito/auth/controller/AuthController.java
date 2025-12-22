@@ -127,7 +127,7 @@ public class AuthController {
         var user = principal.getDomainUser();
         log.info("Logged in user: {}", user.getUsername());
         var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(toSet());
-        String token = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        String token = jwtService.createToken(user.getId(),user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String rt = refreshTokenService.createToken(user);
         log.info("Token from login: "+token.toString());
         log.info("refresh token: "+rt.toString());
@@ -147,7 +147,7 @@ public class AuthController {
 
         User saved = userService.upsertGoogleUser(email, sub, givenName, familyName);
         var roles = saved.getRoles().stream().map(r -> r.getName()).collect(toSet());
-        String token = jwtService.createToken(saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
+        String token = jwtService.createToken(saved.getId(),saved.getId().toString(), saved.getUsername(), saved.getEmail(), roles);
         String rt = refreshTokenService.createToken(saved);
         return ResponseEntity.ok(new TokenPairResponse(token, saved.getUsername(), saved.getEmail(), roles, rt));
     }
@@ -174,7 +174,7 @@ public class AuthController {
         }
 
 // overload your JwtService.createToken to accept "extra" map
-        String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+        String newAccess = jwtService.createToken(user.getId(),user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
 
         //***********************************************************
        // var extra = java.util.Map.<String, Object>of("mfa", true);
@@ -209,7 +209,7 @@ public class AuthController {
             extra.put("auth_time", enforcedAt.getEpochSecond());
         }
        // var extra = java.util.Map.<String, Object>of("mfa", true);
-        String newAccess = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
+        String newAccess = jwtService.createToken(user.getId(),user.getId().toString(), user.getUsername(), user.getEmail(), roles, extra);
 
         //String newAccess  = jwtService.createToken(user.getId().toString(), user.getUsername(), user.getEmail(), roles);
         String newRefresh = refreshTokenService.rotate(oldRt); // revoke old + create new
