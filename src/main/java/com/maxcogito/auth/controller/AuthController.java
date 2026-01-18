@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -24,6 +25,8 @@ import org.springframework.web.bind.annotation.*;
 import com.maxcogito.auth.dto.TokenPairResponse;
 import com.maxcogito.auth.dto.RefreshRequest;
 import com.maxcogito.auth.dto.EmailRequest;
+
+import com.maxcogito.auth.api.dto.TokenPairResponseDto;
 
 import java.time.Instant;
 import java.util.Map;
@@ -115,6 +118,24 @@ public class AuthController {
                 "mfaRequired", requireMfa
         ));
     }
+
+
+    @PostMapping("/service/login")
+    public ResponseEntity<TokenPairResponseDto> servicelogin(@Valid @RequestBody LoginRequest req) {
+        Authentication auth = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(req.getUsernameOrEmail(), req.getPassword())
+        );
+
+        var principal = (UserDetailsImpl) auth.getPrincipal();
+        var user = principal.getDomainUser();
+        var roles = principal.getAuthorities().stream().map(a -> a.getAuthority()).collect(toSet());
+
+        String token = jwtService.createToken(user.getId(), user.getId().toString(), user.getUsername(), user.getEmail(), roles);
+        String rt = refreshTokenService.createToken(user);
+
+        return ResponseEntity.ok(new TokenPairResponseDto(token, user.getUsername(), user.getEmail(), roles, rt));
+    }
+
 
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest req) {
@@ -217,6 +238,33 @@ public class AuthController {
         return ResponseEntity.ok(new TokenPairResponse(newAccess, user.getUsername(), user.getEmail(), roles, newRefresh));
     }
 
+    @PostMapping("/service/token/refresh")
+    @Transactional
+    public ResponseEntity<TokenPairResponseDto> refreshServiceToken(@Valid @RequestBody RefreshRequest req) {
+        final String presented = req.getRefreshToken();
+
+        var oldRt = refreshTokenService.validate(presented);
+        var user  = oldRt.getUser();
+
+        var roles = user.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
+
+        // Ensure the refresh token belongs to a service account
+        if (!roles.contains("ROLE_SERVICE_CLIENT") && !roles.contains("ROLE_ADMIN")) {
+            throw new UnauthorizedException("Not a service client refresh token");
+        }
+
+        Map<String, Object> extraClaims = Map.of("svc", true);
+
+        String newAccess = jwtService.createToken(
+                user.getId(), user.getId().toString(), user.getUsername(), user.getEmail(), roles, extraClaims
+        );
+
+        String newRefresh = refreshTokenService.rotate(oldRt);
+
+        return ResponseEntity.ok(new TokenPairResponseDto(
+                newAccess, user.getUsername(), user.getEmail(), roles, newRefresh
+        ));
+    }
 
     @PostMapping("/verify/start")
     public ResponseEntity<?> startVerify(@Valid @RequestBody EmailRequest req) {
