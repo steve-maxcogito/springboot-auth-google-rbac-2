@@ -119,6 +119,57 @@ public class AuthController {
         ));
     }
 
+    @PostMapping("/register/serviceUser")
+    public ResponseEntity<?> registerServiceUser(@Valid @RequestBody RegisterRequest req) {
+        User u = new User();
+        u.setUsername(req.getUsername());
+        u.setEmail(req.getEmail());
+        u.setFirstName(req.getFirstName());
+        u.setMiddleName(req.getMiddleName());
+        u.setLastName(req.getLastName());
+        u.setAddressLine1(req.getAddressLine1());
+        u.setAddressLine2(req.getAddressLine2());
+        u.setCity(req.getCity());
+        u.setState(req.getState());
+        u.setPostalCode(req.getPostalCode());
+        u.setCountry(req.getCountry());
+        u.setPhoneNumber(req.getPhoneNumber());
+
+        // Persist user (hashing etc.)
+        User saved = userService.registerLocalServiceUser(u, req.getRoles(), req.getPassword());
+
+        // Apply MFA policy (request override → global default)
+        boolean requireMfa = (req.getMfaRequired() != null)
+                ? req.getMfaRequired()
+                : mfaProperties.required(); // inject MfaProperties
+
+        saved.setMfaRequired(requireMfa);
+        // saved.setMfaEnabled(false); // stays false until enrollment verifies
+        userService.save(saved);
+
+        // Start email verification (link or code)
+        verificationService.startVerificationCode(saved);
+
+        var roles = saved.getRoles().stream().map(r -> r.getName()).collect(toSet());
+
+        // Issue onboarding/pre-MFA token
+        String onboarding = jwtService.createOnboardingToken(
+                saved.getId().toString(),
+                saved.getUsername(),
+                saved.getEmail(),
+                roles,
+                mfaProperties.onboardingTtlMinutes(),   // e.g., 10
+                requireMfa
+        );
+
+        // Do NOT create refresh yet; user is not fully authenticated
+        return ResponseEntity.ok(Map.of(
+                "onboardingToken", onboarding,
+                "expiresInSeconds", mfaProperties.onboardingTtlMinutes() * 60,
+                "emailVerificationRequired", true,
+                "mfaRequired", requireMfa
+        ));
+    }
 
     @PostMapping("/service/login")
     public ResponseEntity<TokenPairResponseDto> servicelogin(@Valid @RequestBody LoginRequest req) {

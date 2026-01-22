@@ -144,6 +144,21 @@ public class UserService {
     }
 
     @Transactional
+    public User registerLocalServiceUser(User u, Set<String> roleNames, String rawPassword) {
+        if (userRepository.existsByUsername(u.getUsername())) {
+            throw new IllegalArgumentException("Username already exists");
+        }
+ //       if (userRepository.existsByEmail(u.getEmail()))
+        //         throw new IllegalArgumentException("Email already exists");
+//        }
+
+        u.setProvider(AuthProvider.LOCAL);
+        u.setPasswordHash(passwordEncoder.encode(rawPassword));
+        u.setRoles(resolveRoles(roleNames));
+        return userRepository.save(u);
+    }
+
+    @Transactional
     public User upsertGoogleUser(String email, String sub, String givenName, String familyName) {
         var existing = userRepository.findByEmail(email).orElse(null);
         if (existing != null) {
